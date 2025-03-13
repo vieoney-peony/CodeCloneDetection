@@ -1,0 +1,20 @@
+{
+    "Child": 0,
+    "Parent": 1,
+    "NextSib": 2,
+    "CondTrue": 3,
+    "CondFalse": 4,
+    "WhileExec": 5,
+    "WhileNext": 6,
+    "statements": 7,
+    "NextStmt": 8,
+    "ForExec": 9,
+    "ForNext": 10,
+    "DoExec": 11,
+    "DoNext": 12,
+    "SwitchExec": 13,
+    "NextUse": 14,
+    "LeftOperand": 15,
+    "RightOperand": 16,
+    "Value": 17
+}
