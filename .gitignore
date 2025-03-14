@@ -175,6 +175,5 @@ cython_debug/
 
 # dataset
 BCB_cache/
-Processed_BCB_dataset/
-BCB_dataset/
+Processed_BCB_code/
 codebert_cache/

@@ -86,7 +86,7 @@ if __name__ == '__main__':
     # jsonl_dataset = load_dataset('json', data_files='BCB_dataset/data.jsonl', 
     #                              split='all', 
     #                              cache_dir="./BCB_cache")
-    jsonl_dataset = load_from_disk('Processed_BCB_dataset')
+    jsonl_dataset = load_from_disk('Processed_BCB_code')
     
     print(jsonl_dataset)
 
