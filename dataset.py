@@ -58,10 +58,10 @@ def get_index_order_value(node_dict:dict, edges_dict:dict, ast_edges: list):
     values = [
         (
             str(edge[0].value) if isinstance(edge[0], JavaASTLiteralNode) else 
-            edge[0].operator if isinstance(edge[0], JavaASTBinaryOpNode) else 'None',
+            edge[0].operator if isinstance(edge[0], JavaASTBinaryOpNode) else '"',
             str(edges_dict[edge[1]]),
             str(edge[2].value) if isinstance(edge[2], JavaASTLiteralNode) else 
-            edge[2].operator if isinstance(edge[2], JavaASTBinaryOpNode) else 'None',
+            edge[2].operator if isinstance(edge[2], JavaASTBinaryOpNode) else '"',
         ) 
         for edge in ast_edges
     ]
@@ -83,12 +83,12 @@ def add_edge(jsonl_dataset, node_dict, edges_dict):
     return result_list  # Trả về danh sách các (edges, orders, values)
 
 if __name__ == '__main__':
-    # jsonl_dataset = load_dataset('json', data_files='BCB_dataset/data.jsonl', 
-    #                              split='all', 
-    #                              cache_dir="./BCB_cache")
-    jsonl_dataset = load_from_disk('Processed_BCB_code')
+    jsonl_dataset = load_dataset('json', data_files='BCB_dataset/data.jsonl', 
+                                 split='all', 
+                                 cache_dir="./BCB_cache")
+    # jsonl_dataset = load_from_disk('Processed_BCB_code')
     
-    print(jsonl_dataset)
+    # print(jsonl_dataset)
 
     txt_dataset = load_dataset('text', data_files={
         'train': 'BCB_dataset/train.txt',
@@ -123,15 +123,15 @@ if __name__ == '__main__':
     #     visitor = JavaASTGraphVisitor()
     #     visitor.visit(ast_tree)
 
-    # with open("ast_tree.json", "r") as f:
-    #     node_dict = json.load(f)
-    # with open("ast_edge.json", "r") as f:
-    #     edges_dict = json.load(f)
-    # results = add_edge(jsonl_dataset, node_dict=node_dict, edges_dict=edges_dict)
-    # edges_list = [item[0] for item in results]
-    # orders_list = [item[1] for item in results]
-    # values_list = [item[2] for item in results]
-    # jsonl_dataset = jsonl_dataset.add_column("edges", edges_list)
-    # jsonl_dataset = jsonl_dataset.add_column("orders", orders_list)
-    # jsonl_dataset = jsonl_dataset.add_column("values", values_list)
-    # jsonl_dataset.save_to_disk("Processed_BCB_dataset")
+    with open("ast_tree.json", "r") as f:
+        node_dict = json.load(f)
+    with open("ast_edge.json", "r") as f:
+        edges_dict = json.load(f)
+    results = add_edge(jsonl_dataset, node_dict=node_dict, edges_dict=edges_dict)
+    edges_list = [item[0] for item in results]
+    orders_list = [item[1] for item in results]
+    values_list = [item[2] for item in results]
+    jsonl_dataset = jsonl_dataset.add_column("edges", edges_list)
+    jsonl_dataset = jsonl_dataset.add_column("orders", orders_list)
+    jsonl_dataset = jsonl_dataset.add_column("values", values_list)
+    jsonl_dataset.save_to_disk("Processed_BCB_code")

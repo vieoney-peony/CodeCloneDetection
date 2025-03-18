@@ -1,0 +1,28 @@
+data:
+  dataset: './BCB_dataset'
+
+  processed_dataset: './Processed_BCB_code'
+
+  node_dict: './ast_tree.json'
+  edge_dict: './ast_edge.json'
+
+  model:
+    num_layers: 2
+    graph_embed_dim: 128
+
+
+train:
+  epochs: &epochs 1000
+  optimizer:
+    type: torch.optim.SGD
+    params:
+      lr: 0.01
+      momentum: 0.9
+      weight_decay: 0.0005
+  scheduler:
+    type: torch.optim.lr_scheduler.CosineAnnealingLR
+    params:
+      T_max: *epochs
+      eta_min: 0.0001
+  amp: true
+
