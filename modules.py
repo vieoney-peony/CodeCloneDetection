@@ -19,6 +19,7 @@ from torch_geometric.typing import Adj, OptPairTensor, OptTensor, Size
 from torch_geometric.utils import spmm
 
 from utils import set_seed
+from config import Config
 
 set_seed(0)
 
@@ -259,10 +260,10 @@ class GraphCreator(nn.Module):
         return Batch.from_data_list(graph_list)
             
 class GCM(nn.Module):
-    def __init__(self, in_dim=128, hidden_dim=128, num_layers=4):
+    def __init__(self, in_dim=128, hidden_dim=128, num_layers=4, num_heads=4):
         super().__init__()
         self.num_layers = num_layers
-
+        self.num_heads = num_heads
         self.gnn_layers = nn.ModuleList([
             HeteroConv({
                 ("node", "edge", "node"): CustomedGraphConv(in_dim if i == 0 else hidden_dim, 
@@ -270,42 +271,41 @@ class GCM(nn.Module):
                                                             aggr="mean")
             }, aggr="mean") for i in range(num_layers)
         ])
+        
+        self.cross_attns = nn.ModuleList([
+            nn.Sequential(
+                nn.MultiheadAttention(hidden_dim, num_heads, batch_first=True),
+                nn.LayerNorm(hidden_dim)  # LayerNorm nên đặt ngoài, không trong danh sách []
+            ) for _ in range(num_layers)
+        ])
+
     
-    def cross_graph_attention(self, source_batch: Batch, target_batch: Batch):
-        source_batches = source_batch["node"].batch  # (num_nodes,)
-        target_batches = target_batch["node"].batch  # (num_nodes,)
+    def cross_graph_attention(self, source_batch, target_batch, cross_attn):
+        source_batches = source_batch["node"].batch
+        target_batches = target_batch["node"].batch
         unique_batches = torch.unique(source_batches)
 
-        source_x = source_batch["node"].x  # Lấy node embeddings của source
-        target_x = target_batch["node"].x  # Lấy node embeddings của target
-        
+        source_x = source_batch["node"].x
+        target_x = target_batch["node"].x
+
         new_source_x = source_x.clone()
-        new_target_x = target_x.clone() 
+        new_target_x = target_x.clone()
+
+        attn_layer, norm_layer = cross_attn  
 
         for batch_idx in unique_batches:
             src_mask = source_batches == batch_idx
             tgt_mask = target_batches == batch_idx
             if src_mask.sum() > 0 and tgt_mask.sum() > 0:
-                src_nodes = source_x[src_mask]  # (num_src_nodes, hidden_dim)
-                tgt_nodes = target_x[tgt_mask]  # (num_tgt_nodes, hidden_dim)
+                src_nodes = source_x[src_mask].unsqueeze(0)  
+                tgt_nodes = target_x[tgt_mask].unsqueeze(0)  
 
-                simmiarity = torch.matmul(src_nodes, tgt_nodes.T)  # (num_src_nodes, num_tgt_nodes)
+                attn_output, _ = attn_layer(src_nodes, tgt_nodes, tgt_nodes)  
+                attn_output_t, _ = attn_layer(tgt_nodes, src_nodes, src_nodes)  
 
-                # Attention từ source → target (chuẩn hóa theo hàng)
-                attention = torch.softmax(simmiarity, dim=1)  # (num_src_nodes, num_tgt_nodes)
+                new_source_x.index_copy_(0, src_mask.nonzero(as_tuple=True)[0], norm_layer(attn_output.squeeze(0)))
+                new_target_x.index_copy_(0, tgt_mask.nonzero(as_tuple=True)[0], norm_layer(attn_output_t.squeeze(0)))
 
-                # Lấy embedding mới cho source từ target (vẫn đúng vì tổng hàng = 1)
-                new_src_emb = torch.matmul(attention, tgt_nodes)  # (num_src_nodes, hidden_dim)
-
-                # 🚀 Cần chuẩn hóa lại attention để tổng từng cột = 1 trước khi nhân với src_nodes!
-                attention_t = torch.softmax(simmiarity, dim=0)  # Chuẩn hóa lại theo cột
-
-                # Lấy embedding mới cho target từ source
-                new_tgt_emb = torch.matmul(attention_t.T, src_nodes)  # (num_tgt_nodes, hidden_dim)
-
-                new_source_x.index_copy_(0, src_mask.nonzero(as_tuple=True)[0], new_src_emb)
-                new_target_x.index_copy_(0, tgt_mask.nonzero(as_tuple=True)[0], new_tgt_emb)
-        
         source_batch["node"].x = new_source_x
         target_batch["node"].x = new_target_x
 
@@ -333,7 +333,7 @@ class GCM(nn.Module):
             target_batch["node"].x = target_x_updated.clone()
             # print(source_batch["node"].x - target_batch["node"].x)
 
-            self.cross_graph_attention(source_batch, target_batch)
+            self.cross_graph_attention(source_batch, target_batch, self.cross_attns[i])
 
         match_scores = []
         unique_batches = torch.unique(source_batch["node"].batch)
@@ -351,17 +351,28 @@ class GCM(nn.Module):
                 match_scores.append(torch.tensor(0.0, device=self.device))
 
         return torch.stack(match_scores) 
-    
-if __name__ == '__main__':
-    jsonl_dataset = load_from_disk('Processed_BCB_code')
-    
-    with open("ast_tree.json", "r") as f:
+
+def build_model(config):
+    with open(config['node_dict'], "r") as f:
         node_dict = json.load(f)
-    with open("ast_edge.json", "r") as f:
+    with open(config['edge_dict'], "r") as f:
         edges_dict = json.load(f)
 
-    graph_creator = GraphCreator(node_dict=node_dict, edge_dict=edges_dict, embedding_dim=128).to(device)
-    model = GCM(in_dim=128, hidden_dim=128, num_layers=4).to(device)
+    model_config = config['model']
+    graph_creator = GraphCreator(node_dict=node_dict, 
+                                 edge_dict=edges_dict, 
+                                 embedding_dim=model_config['embedding_dim']).to(device)
+    
+    model = GCM(in_dim=model_config['embedding_dim'], 
+                hidden_dim=model_config['hidden_dim'], 
+                num_layers=model_config['num_layers']).to(device)
+    
+    return graph_creator, model
+
+if __name__ == '__main__':
+    config = Config("config.yaml")
+    jsonl_dataset = load_from_disk('Processed_BCB_code')
+    graph_creator, model = build_model(config)
     max_order = 0
     max_len = 0
     for i, batch in enumerate(jsonl_dataset.iter(batch_size=2)):
@@ -369,10 +380,10 @@ if __name__ == '__main__':
         edges = batch["edges"]
         orders = batch["orders"]
         values = batch["values"]
-        with torch.no_grad():
-            graph_list = graph_creator(edges, orders, values)
-            graph_list2 = graph_creator(edges, orders, values)
-            result = model(graph_list, graph_list2)
+        
+        graph_list = graph_creator(edges, orders, values)
+        graph_list2 = graph_creator(edges, orders, values)
+        result = model(graph_list, graph_list2)
         print(i, result)
-        # break
+        break
         

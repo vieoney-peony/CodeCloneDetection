@@ -1,14 +1,18 @@
+node_dict: './ast_tree.json'
+edge_dict: './ast_edge.json'
+
 data:
   dataset: './BCB_dataset'
-
   processed_dataset: './Processed_BCB_code'
 
-  node_dict: './ast_tree.json'
-  edge_dict: './ast_edge.json'
 
-  model:
-    num_layers: 2
-    graph_embed_dim: 128
+model:
+  num_layers: 2
+  embedding_dim: 128
+  hidden_dim: 128
+
+  num_layers: 4
+  num_heads: 4
 
 
 train:
