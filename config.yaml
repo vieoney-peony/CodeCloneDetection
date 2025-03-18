@@ -1,9 +1,17 @@
 node_dict: './ast_tree.json'
 edge_dict: './ast_edge.json'
 
-data:
+dataset:
   dataset: './BCB_dataset'
-  processed_dataset: './Processed_BCB_code'
+  processed_codes: './Processed_BCB_code'
+
+  source_codes: 'data.jsonl'
+  train: 'train.txt'
+  valid: 'valid.txt'
+  test: 'test.txt'
+  cache_dir: "./BCB_cache"
+
+  batch_size: 2
 
 
 model:

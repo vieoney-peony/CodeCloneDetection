@@ -1,10 +1,18 @@
+import os
+
 import javalang
+import json
+
 from datasets import load_dataset, load_from_disk
 from order_flow_ast import JavaASTGraphVisitor, JavaASTLiteralNode, JavaASTBinaryOpNode
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 from functools import partial
-import json
+from utils import set_seed
+
+from config import Config
+
+set_seed(0)
 
 def process_text(batch):
     idx1, idx2, label = [], [], []
@@ -82,25 +90,25 @@ def add_edge(jsonl_dataset, node_dict, edges_dict):
     
     return result_list  # Trả về danh sách các (edges, orders, values)
 
-if __name__ == '__main__':
-    jsonl_dataset = load_dataset('json', data_files='BCB_dataset/data.jsonl', 
-                                 split='all', 
-                                 cache_dir="./BCB_cache")
-    # jsonl_dataset = load_from_disk('Processed_BCB_code')
-    
-    # print(jsonl_dataset)
+def build_dataset(config):
+    dataset_config = config['dataset']
+
+    with open(config['node_dict'], "r") as f:
+        node_dict = json.load(f)
+    with open(config['edge_dict'], "r") as f:
+        edges_dict = json.load(f)
+
+    source_codes = os.path.join(dataset_config['dataset'], dataset_config['source_codes'])
+    train_path = os.path.join(dataset_config['dataset'], dataset_config['train'])
+    valid_path = os.path.join(dataset_config['dataset'], dataset_config['valid'])
+    test_path = os.path.join(dataset_config['dataset'], dataset_config['test'])
 
     txt_dataset = load_dataset('text', data_files={
-        'train': 'BCB_dataset/train.txt',
-        'valid': 'BCB_dataset/valid.txt',
-        'test': 'BCB_dataset/test.txt'},
-        cache_dir="./BCB_cache"
-    )
-
-    jsonl_dataset = jsonl_dataset.map(
-        process_code, 
-        batched=True, 
-        batch_size=100  # Đọc 100 dòng một lần
+        'train': train_path,
+        'valid': valid_path,
+        'test': test_path
+        },
+        cache_dir=dataset_config['cache_dir']
     )
 
     txt_dataset = txt_dataset.map(
@@ -110,9 +118,64 @@ if __name__ == '__main__':
         batch_size=100  # Đọc 100 dòng một lần
     )
 
+    if dataset_config['processed_codes'] is not None:
+        jsonl_dataset = load_from_disk(dataset_config['processed_codes'])
+    else:
+        dataset_config['processed_codes'] = "Processed_BCB_code" # default
+        jsonl_dataset = load_dataset('json', 
+                                    data_files=source_codes,
+                                    split='all',
+                                    cache_dir=dataset_config['cache_dir']
+                                    )
+        jsonl_dataset = jsonl_dataset.map(
+            process_code, 
+            batched=True, 
+            batch_size=100  # Đọc 100 dòng một lần
+        )
 
-    print("JSONL Data:", jsonl_dataset)
-    print("TXT Data:", txt_dataset)
+        results = add_edge(jsonl_dataset, node_dict=node_dict, edges_dict=edges_dict)
+
+        edges_list = [item[0] for item in results]
+        orders_list = [item[1] for item in results]
+        values_list = [item[2] for item in results]
+        jsonl_dataset = jsonl_dataset.add_column("edges", edges_list)
+        jsonl_dataset = jsonl_dataset.add_column("orders", orders_list)
+        jsonl_dataset = jsonl_dataset.add_column("values", values_list)
+        jsonl_dataset.save_to_disk(dataset_config['processed_codes'])
+    
+    return jsonl_dataset, txt_dataset
+
+if __name__ == '__main__':
+    # jsonl_dataset = load_dataset('json', data_files='BCB_dataset/data.jsonl', 
+    #                              split='all', 
+    #                              cache_dir="./BCB_cache")
+    # jsonl_dataset = load_from_disk('Processed_BCB_code')
+    
+    # print(jsonl_dataset)
+
+    # txt_dataset = load_dataset('text', data_files={
+    #     'train': 'BCB_dataset/train.txt',
+    #     'valid': 'BCB_dataset/valid.txt',
+    #     'test': 'BCB_dataset/test.txt'},
+    #     cache_dir="./BCB_cache"
+    # )
+
+    # jsonl_dataset = jsonl_dataset.map(
+    #     process_code, 
+    #     batched=True, 
+    #     batch_size=100  # Đọc 100 dòng một lần
+    # )
+
+    # txt_dataset = txt_dataset.map(
+    #     process_text, 
+    #     remove_columns=['text'], 
+    #     batched=True, 
+    #     batch_size=100  # Đọc 100 dòng một lần
+    # )
+
+
+    # print("JSONL Data:", jsonl_dataset)
+    # print("TXT Data:", txt_dataset)
 
     # df_jsonl = jsonl_dataset.to_pandas()
 
@@ -123,15 +186,19 @@ if __name__ == '__main__':
     #     visitor = JavaASTGraphVisitor()
     #     visitor.visit(ast_tree)
 
-    with open("ast_tree.json", "r") as f:
-        node_dict = json.load(f)
-    with open("ast_edge.json", "r") as f:
-        edges_dict = json.load(f)
-    results = add_edge(jsonl_dataset, node_dict=node_dict, edges_dict=edges_dict)
-    edges_list = [item[0] for item in results]
-    orders_list = [item[1] for item in results]
-    values_list = [item[2] for item in results]
-    jsonl_dataset = jsonl_dataset.add_column("edges", edges_list)
-    jsonl_dataset = jsonl_dataset.add_column("orders", orders_list)
-    jsonl_dataset = jsonl_dataset.add_column("values", values_list)
-    jsonl_dataset.save_to_disk("Processed_BCB_code")
+    # with open("ast_tree.json", "r") as f:
+    #     node_dict = json.load(f)
+    # with open("ast_edge.json", "r") as f:
+    #     edges_dict = json.load(f)
+    # results = add_edge(jsonl_dataset, node_dict=node_dict, edges_dict=edges_dict)
+    # edges_list = [item[0] for item in results]
+    # orders_list = [item[1] for item in results]
+    # values_list = [item[2] for item in results]
+    # jsonl_dataset = jsonl_dataset.add_column("edges", edges_list)
+    # jsonl_dataset = jsonl_dataset.add_column("orders", orders_list)
+    # jsonl_dataset = jsonl_dataset.add_column("values", values_list)
+    # jsonl_dataset.save_to_disk("Processed_BCB_code")
+
+    config = Config('config.yaml')
+    jsonl_dataset, txt_dataset = build_dataset(config.config)
+    print(jsonl_dataset)
