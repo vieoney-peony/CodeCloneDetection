@@ -22,9 +22,10 @@ model:
   num_layers: 4
   num_heads: 4
 
+log_dir: "runs"
 
 train:
-  epochs: &epochs 1000
+  epochs: &epochs 20
   optimizer:
     type: torch.optim.SGD
     params:

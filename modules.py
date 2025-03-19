@@ -303,8 +303,10 @@ class GCM(nn.Module):
                 attn_output, _ = attn_layer(src_nodes, tgt_nodes, tgt_nodes)  
                 attn_output_t, _ = attn_layer(tgt_nodes, src_nodes, src_nodes)  
 
-                new_source_x.index_copy_(0, src_mask.nonzero(as_tuple=True)[0], norm_layer(attn_output.squeeze(0)))
-                new_target_x.index_copy_(0, tgt_mask.nonzero(as_tuple=True)[0], norm_layer(attn_output_t.squeeze(0)))
+                new_source_x.index_copy_(0, src_mask.nonzero(as_tuple=True)[0], 
+                                         norm_layer(attn_output.squeeze(0)).to(dtype=new_source_x.dtype))
+                new_target_x.index_copy_(0, tgt_mask.nonzero(as_tuple=True)[0], 
+                                         norm_layer(attn_output_t.squeeze(0)).to(dtype=new_source_x.dtype))
 
         source_batch["node"].x = new_source_x
         target_batch["node"].x = new_target_x
@@ -344,8 +346,8 @@ class GCM(nn.Module):
             if src_mask.sum() > 0 and tgt_mask.sum() > 0:
                 src_nodes = source_batch["node"].x[src_mask].mean(dim=0)
                 tgt_nodes = target_batch["node"].x[tgt_mask].mean(dim=0)
-                # Tính toán cosine similarity giữa các node embeddings
-                match_score = torch.cosine_similarity(src_nodes, tgt_nodes, dim=0)  
+                # Tính toán dot product giữa các node embeddings
+                match_score = torch.dot(src_nodes, tgt_nodes) 
                 match_scores.append(match_score)
             else:
                 match_scores.append(torch.tensor(0.0, device=self.device))
@@ -361,13 +363,25 @@ def build_model(config):
     model_config = config['model']
     graph_creator = GraphCreator(node_dict=node_dict, 
                                  edge_dict=edges_dict, 
-                                 embedding_dim=model_config['embedding_dim']).to(device)
+                                 embedding_dim=model_config['embedding_dim'])
     
     model = GCM(in_dim=model_config['embedding_dim'], 
                 hidden_dim=model_config['hidden_dim'], 
-                num_layers=model_config['num_layers']).to(device)
+                num_layers=model_config['num_layers']) 
     
     return graph_creator, model
+
+def inference(graph_creator: GraphCreator, model: GCM, code_batch_source, code_batch_target):
+    graph_source = graph_creator(code_batch_source["edges"], 
+                                code_batch_source["orders"], 
+                                code_batch_source["values"])
+            
+    graph_target = graph_creator(code_batch_target["edges"], 
+                                code_batch_target["orders"], 
+                                code_batch_target["values"])
+    
+    scores = model(graph_source, graph_target)
+    return scores
 
 if __name__ == '__main__':
     config = Config("config.yaml")

@@ -200,5 +200,29 @@ if __name__ == '__main__':
     # jsonl_dataset.save_to_disk("Processed_BCB_code")
 
     config = Config('config.yaml')
-    jsonl_dataset, txt_dataset = build_dataset(config.config)
-    print(jsonl_dataset)
+    jsonl_dataset, txt_dataset = build_dataset(config)
+    idx_map = {v: i for i, v in enumerate(jsonl_dataset['idx'])}
+    print(txt_dataset['train'])
+    from torch.utils.data import DataLoader
+    trainloader = DataLoader(txt_dataset['train'], batch_size=2, shuffle=True)
+
+    for batch in trainloader:
+        print(batch)
+
+        # Lấy danh sách chỉ số từ batch
+        batch_indices_1 = batch['idx1']
+        batch_indices_2 = batch['idx2']
+
+        # Lấy vị trí đúng thứ tự của batch['idx1'] và batch['idx2']
+        sorted_indices_1 = [idx_map[idx.item()] for idx in batch_indices_1]
+        sorted_indices_2 = [idx_map[idx.item()] for idx in batch_indices_2]
+
+        # Lấy dữ liệu từ jsonl_dataset theo đúng thứ tự batch
+        code_batch_source = jsonl_dataset.select(sorted_indices_1)
+        code_batch_target = jsonl_dataset.select(sorted_indices_2)
+
+        print(code_batch_source)
+        print(code_batch_target)
+        
+
+        break  # Dừng sau batch đầu tiên
