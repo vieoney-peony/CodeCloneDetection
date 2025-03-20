@@ -1,8 +1,10 @@
 import os
+import random
 
 import javalang
 import json
 
+from torch.utils.data import Sampler
 from datasets import load_dataset, load_from_disk
 from order_flow_ast import JavaASTGraphVisitor, JavaASTLiteralNode, JavaASTBinaryOpNode
 from concurrent.futures import ThreadPoolExecutor
@@ -13,6 +15,22 @@ from utils import set_seed
 from config import Config
 
 set_seed(0)
+
+class PosNegSampler():
+    def __init__(self, dataset):
+        self.dataset = dataset  # Lưu dataset gốc
+        self.pos_indices = [i for i, x in enumerate(dataset["label"]) if x == 1]
+        self.neg_indices = [i for i, x in enumerate(dataset["label"]) if x == 0]
+
+    def sample(self, batch_size):
+        pos_sample_ids = random.sample(self.pos_indices, batch_size)  # Lấy batch ngẫu nhiên từ chỉ mục
+        neg_sample_ids = random.sample(self.neg_indices, batch_size)
+
+        pos_batch = self.dataset.select(pos_sample_ids)  # Chọn dữ liệu từ chỉ mục
+        neg_batch = self.dataset.select(neg_sample_ids)
+
+        return pos_batch, neg_batch
+        
 
 def process_text(batch):
     idx1, idx2, label = [], [], []
@@ -146,83 +164,18 @@ def build_dataset(config):
     return jsonl_dataset, txt_dataset
 
 if __name__ == '__main__':
-    # jsonl_dataset = load_dataset('json', data_files='BCB_dataset/data.jsonl', 
-    #                              split='all', 
-    #                              cache_dir="./BCB_cache")
-    # jsonl_dataset = load_from_disk('Processed_BCB_code')
-    
-    # print(jsonl_dataset)
-
-    # txt_dataset = load_dataset('text', data_files={
-    #     'train': 'BCB_dataset/train.txt',
-    #     'valid': 'BCB_dataset/valid.txt',
-    #     'test': 'BCB_dataset/test.txt'},
-    #     cache_dir="./BCB_cache"
-    # )
-
-    # jsonl_dataset = jsonl_dataset.map(
-    #     process_code, 
-    #     batched=True, 
-    #     batch_size=100  # Đọc 100 dòng một lần
-    # )
-
-    # txt_dataset = txt_dataset.map(
-    #     process_text, 
-    #     remove_columns=['text'], 
-    #     batched=True, 
-    #     batch_size=100  # Đọc 100 dòng một lần
-    # )
-
-
-    # print("JSONL Data:", jsonl_dataset)
-    # print("TXT Data:", txt_dataset)
-
-    # df_jsonl = jsonl_dataset.to_pandas()
-
-    # print("Sampling data:")
-    # for record in tqdm(jsonl_dataset, desc="Processing records"):
-    #     code = record["func"]
-    #     ast_tree = javalang.parse.parse(code)
-    #     visitor = JavaASTGraphVisitor()
-    #     visitor.visit(ast_tree)
-
-    # with open("ast_tree.json", "r") as f:
-    #     node_dict = json.load(f)
-    # with open("ast_edge.json", "r") as f:
-    #     edges_dict = json.load(f)
-    # results = add_edge(jsonl_dataset, node_dict=node_dict, edges_dict=edges_dict)
-    # edges_list = [item[0] for item in results]
-    # orders_list = [item[1] for item in results]
-    # values_list = [item[2] for item in results]
-    # jsonl_dataset = jsonl_dataset.add_column("edges", edges_list)
-    # jsonl_dataset = jsonl_dataset.add_column("orders", orders_list)
-    # jsonl_dataset = jsonl_dataset.add_column("values", values_list)
-    # jsonl_dataset.save_to_disk("Processed_BCB_code")
 
     config = Config('config.yaml')
     jsonl_dataset, txt_dataset = build_dataset(config)
     idx_map = {v: i for i, v in enumerate(jsonl_dataset['idx'])}
     print(txt_dataset['train'])
     from torch.utils.data import DataLoader
-    trainloader = DataLoader(txt_dataset['train'], batch_size=2, shuffle=True)
+    trainloader = DataLoader(txt_dataset['test'], batch_size=2, shuffle=True)
 
+    print("Checking...")
     for batch in trainloader:
-        print(batch)
-
-        # Lấy danh sách chỉ số từ batch
-        batch_indices_1 = batch['idx1']
-        batch_indices_2 = batch['idx2']
-
-        # Lấy vị trí đúng thứ tự của batch['idx1'] và batch['idx2']
-        sorted_indices_1 = [idx_map[idx.item()] for idx in batch_indices_1]
-        sorted_indices_2 = [idx_map[idx.item()] for idx in batch_indices_2]
-
-        # Lấy dữ liệu từ jsonl_dataset theo đúng thứ tự batch
-        code_batch_source = jsonl_dataset.select(sorted_indices_1)
-        code_batch_target = jsonl_dataset.select(sorted_indices_2)
-
-        print(code_batch_source)
-        print(code_batch_target)
-        
-
-        break  # Dừng sau batch đầu tiên
+        for i in range(len(batch['idx1'])):
+            if batch['idx1'][i].item() not in idx_map and batch['idx2'][i].item() not in idx_map:
+                print(batch['idx1'][i], batch['idx2'][i])
+                exit(0)   
+        print("OK")

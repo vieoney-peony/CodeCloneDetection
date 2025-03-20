@@ -84,6 +84,11 @@ def prepare_batch(batch, idx_map, jsonl_dataset, device):
     batch_indices_2 = batch['idx2']
     labels = batch['label'] 
 
+    if isinstance(batch_indices_1, torch.Tensor):
+        batch_indices_1 = batch_indices_1.tolist()
+    if isinstance(batch_indices_2, torch.Tensor):
+        batch_indices_2 = batch_indices_2.tolist()
+        
     sorted_indices_1 = [idx_map[idx] for idx in batch_indices_1]
     sorted_indices_2 = [idx_map[idx] for idx in batch_indices_2]
 

@@ -313,7 +313,6 @@ class GCM(nn.Module):
 
         return source_batch, target_batch
 
-
     def forward(self, source_batch: Batch, target_batch: Batch):
         """
         source_batch, target_batch: Batch của HeteroData chứa nhiều đồ thị
@@ -387,8 +386,7 @@ if __name__ == '__main__':
     config = Config("config.yaml")
     jsonl_dataset = load_from_disk('Processed_BCB_code')
     graph_creator, model = build_model(config)
-    max_order = 0
-    max_len = 0
+    mean_num_node = 0
     for i, batch in enumerate(jsonl_dataset.iter(batch_size=2)):
         torch.cuda.empty_cache()
         edges = batch["edges"]
@@ -396,8 +394,11 @@ if __name__ == '__main__':
         values = batch["values"]
         
         graph_list = graph_creator(edges, orders, values)
-        graph_list2 = graph_creator(edges, orders, values)
-        result = model(graph_list, graph_list2)
-        print(i, result)
-        break
+        # graph_list2 = graph_creator(edges, orders, values)
+        # result = model(graph_list, graph_list2)
+        # print(i, result)
+        mean_num_node = (mean_num_node*i + graph_list["node"].num_nodes) / (i+1)
+        print(mean_num_node)
+                                             
+    print(f"Mean number of nodes: {mean_num_node}")
         
