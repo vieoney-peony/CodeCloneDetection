@@ -6,8 +6,8 @@ dataset:
   processed_codes: './Processed_BCB_code'
 
   source_codes: 'data.jsonl'
-  train: 'train.txt'
-  valid: 'valid.txt'
+  train: 'valid_dev.txt'
+  valid: 'valid_dev.txt'
   test: 'test.txt'
   cache_dir: "./BCB_cache"
 

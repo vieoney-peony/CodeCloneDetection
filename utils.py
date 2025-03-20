@@ -88,7 +88,7 @@ def prepare_batch(batch, idx_map, jsonl_dataset, device):
         batch_indices_1 = batch_indices_1.tolist()
     if isinstance(batch_indices_2, torch.Tensor):
         batch_indices_2 = batch_indices_2.tolist()
-        
+
     sorted_indices_1 = [idx_map[idx] for idx in batch_indices_1]
     sorted_indices_2 = [idx_map[idx] for idx in batch_indices_2]
 
@@ -96,3 +96,32 @@ def prepare_batch(batch, idx_map, jsonl_dataset, device):
     code_batch_target = jsonl_dataset.select(sorted_indices_2)
 
     return code_batch_source, code_batch_target, torch.tensor(labels, dtype=float).to(device)
+
+def save_loss_plot(train_losses, val_losses, file_path):
+    plt.figure(figsize=(10, 5))
+    plt.plot(
+        range(len(train_losses)),
+        train_losses,
+        label="Train Loss",
+        color="blue",
+        linestyle="-",
+    )
+    plt.plot(
+        range(len(val_losses)),
+        val_losses,
+        label="Validation Loss",
+        color="orange",
+        linestyle="-",
+    )
+    plt.xlabel("Epoch")
+
+    # Chỉnh số lượng tick trên trục x để thưa hơn
+    step = max(1, len(train_losses) // 10)  # Cứ mỗi 10% số epoch đặt 1 tick
+    plt.xticks(range(0, len(train_losses), step))
+
+    plt.ylabel("Loss")
+    plt.title("Training and Validation Loss over Epochs")
+    plt.legend()
+
+    plt.savefig(file_path)
+    plt.close()

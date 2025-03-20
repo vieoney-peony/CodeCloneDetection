@@ -11,9 +11,11 @@ from torch.amp import autocast
 from config import Config
 from dataset import build_dataset, PosNegSampler
 from modules import build_model, inference
+from loss import bce
+from evaluation import eval
 
 from utils import set_seed, create_optimizer_scheduler_scaler, \
-                    save_checkpoint, load_checkpoint, prepare_batch
+                    save_checkpoint, load_checkpoint, prepare_batch, save_loss_plot
 
 set_seed(0)
 
@@ -80,7 +82,14 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
                     optimizer, scheduler, scaler):
     total_loss = 0
 
-    for batch in tqdm(train_loader, desc="Training"):
+    pbar = tqdm(
+        enumerate(train_loader),
+        desc="Training",
+        total=len(train_loader),
+        bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+    )
+
+    for i, batch in pbar:
         optimizer.zero_grad()
         pos_batch, neg_batch = pos_neg_sampler.sample(batch_size)
         # get default samples
@@ -88,21 +97,22 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
         
         # get positive and negative samples
         pos_code_batch_source, pos_code_batch_target, pos_labels = prepare_batch(pos_batch, idx_map, jsonl_dataset, device)
-        neg_code_batch_source, neg_code_batch_target, neg_labels = prepare_batch(neg_batch, idx_map, jsonl_dataset, device)
-        pos_neg_labels = torch.cat([pos_labels, neg_labels], dim=0)
+        # neg_code_batch_source, neg_code_batch_target, neg_labels = prepare_batch(neg_batch, idx_map, jsonl_dataset, device)
+        # pos_neg_labels = torch.cat([pos_labels, neg_labels], dim=0)
         
         with autocast(device_type=device.type, enabled=scaler is not None):
-            scores = inference(graph_creator, model, code_batch_source, code_batch_target)
+            logit = inference(graph_creator, model, code_batch_source, code_batch_target)
 
-            pos_scores = inference(graph_creator, model, pos_code_batch_source, pos_code_batch_target)
-            neg_scores = inference(graph_creator, model, neg_code_batch_source, neg_code_batch_target)
+            pos_logit = inference(graph_creator, model, pos_code_batch_source, pos_code_batch_target)
+            # neg_logit = inference(graph_creator, model, neg_code_batch_source, neg_code_batch_target)
 
-            pos_neg_scores = torch.cat([pos_scores, neg_scores], dim=0)
+            # pos_neg_logit = torch.cat([pos_logit, neg_logit], dim=0)
 
-            loss = torch.nn.functional.binary_cross_entropy_with_logits(scores, labels)
-            loss2 = torch.nn.functional.binary_cross_entropy_with_logits(pos_neg_scores, pos_neg_labels)
+            loss = bce(logit, labels)
+            # loss2 = bce(pos_neg_logit, pos_neg_labels)
+            loss2 = bce(pos_logit, pos_labels)
 
-        total_loss += loss.item()
+        total_loss = (total_loss*i + loss.item()) / (i+1)
 
         # Backward pass
         scaler.scale(loss + loss2).backward()
@@ -112,7 +122,8 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
     if scheduler is not None:
         scheduler.step()
 
-    return total_loss / len(train_loader)
+    print(f"train loss: {total_loss}")
+    return total_loss
     
     
 
@@ -124,17 +135,49 @@ def train(arg):
     optimizer, scheduler, scaler, \
     start_epoch, end_epoch, writer = init(config)
 
+    log_dir = writer.log_dir
     batch_size = config["dataset"]["batch_size"]
+
+    best_val_loss = float("inf")
+    last_model_path = os.path.join(log_dir, "last.pt")
+    best_model_path = os.path.join(log_dir, "best.pt")
+    loss_plot_path = os.path.join(log_dir, "loss_plot.png")
+
+    train_losses = []
+    val_losses = []
 
     for epoch in range(start_epoch, end_epoch):
         print(f"Epoch {epoch+1}/{end_epoch}")
         model.train()
         graph_creator.train()
+
         t_loss = train_one_epoch(model, graph_creator, jsonl_dataset, 
                                  idx_map, train_loader, pos_neg_sampler, batch_size,
                                  optimizer, scheduler, scaler)
 
-        break
+
+        result = eval(model, graph_creator, jsonl_dataset, idx_map, val_loader, batch_size, device)
+
+        
+        # saving
+        if result['eval_loss'] < best_val_loss:
+            best_val_loss = result['eval_loss']
+            save_checkpoint(model, graph_creator, optimizer, scheduler, scaler, epoch, end_epoch, best_model_path)
+
+        save_checkpoint(model, graph_creator, optimizer, scheduler, scaler, epoch, end_epoch, last_model_path)
+
+        train_losses.append(t_loss)
+        val_losses.append(result["eval_loss"])
+
+        writer.add_scalar("Loss/train", t_loss, epoch)
+        writer.add_scalar("Loss/eval", result["eval_loss"], epoch)
+        writer.add_scalar("F1/eval", result["eval_f1"], epoch)
+        writer.add_scalar("Precision/eval", result["eval_precision"], epoch)
+        writer.add_scalar("Recall/eval", result["eval_recall"], epoch)
+
+        save_loss_plot(train_losses, val_losses, loss_plot_path)
+        
+        print("-" * 50)
 
 
 if __name__ == "__main__":
