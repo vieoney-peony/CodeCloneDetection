@@ -6,8 +6,10 @@ dataset:
   processed_codes: './Processed_BCB_code'
 
   source_codes: 'data.jsonl'
-  train: 'valid_dev.txt'
-  valid: 'valid_dev.txt'
+  train: 'train.txt'
+  valid: 'valid.txt'
+  # train: 'valid_dev.txt'
+  # valid: 'valid_dev.txt'
   test: 'test.txt'
   cache_dir: "./BCB_cache"
 
@@ -29,7 +31,7 @@ train:
   optimizer:
     type: torch.optim.SGD
     params:
-      lr: 0.01
+      lr: 0.0001
       momentum: 0.9
       weight_decay: 0.0005
   scheduler:

@@ -8,11 +8,12 @@ import torch
 from config import Config
 from modules import build_model, inference
 from dataset import build_dataset
-from loss import bce
+from loss import bce, cosine_similarity_loss
+from metrics import calculate_metrics
 from utils import set_seed, create_optimizer_scheduler_scaler, \
                     save_checkpoint, load_checkpoint, prepare_batch
 
-from sklearn.metrics import precision_score, recall_score, f1_score
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -33,42 +34,18 @@ def eval(model, graph_creator, jsonl_dataset,
         with torch.no_grad():
             code_batch_source, code_batch_target, labels = prepare_batch(batch, idx_map, jsonl_dataset, device)
             logit = inference(graph_creator, model, code_batch_source, code_batch_target)
-
-            loss = bce(logit, labels)
+            
+            loss = cosine_similarity_loss(logit, labels)
 
             total_loss = (total_loss*i + loss.item()) / (i+1)
 
-            logits.append(logit.cpu().numpy())
+            logits.append(logit.sigmoid().cpu().numpy())
             y_trues.append(labels.cpu().numpy())
     
     logits=np.concatenate(logits,0)
-    y_trues=np.concatenate(y_trues,0)
-    best_threshold=0
-    best_f1=0
-    
-    for i in range(1,100):
-        threshold=i/100
-        y_preds=logits[:]>threshold
-        recall=recall_score(y_trues, y_preds, zero_division=0.0)
-        precision=precision_score(y_trues, y_preds, zero_division=0.0)
-        f1=f1_score(y_trues, y_preds, zero_division=0.0) 
-        if f1>best_f1:
-            best_f1=f1
-            best_threshold=threshold
-
-    y_preds=logits[:]>best_threshold
-
-    recall=recall_score(y_trues, y_preds, zero_division=0.0)
-    precision=precision_score(y_trues, y_preds, zero_division=0.0)
-    f1=f1_score(y_trues, y_preds, zero_division=0.0)             
-
-    result = {
-        "eval_loss": total_loss,
-        "eval_recall": float(recall),
-        "eval_precision": float(precision),
-        "eval_f1": float(f1),
-        "eval_threshold": best_threshold,
-    }
+    y_trues=np.concatenate(y_trues,0)       
+    result = calculate_metrics(logits, y_trues)
+    result["eval_loss"] = total_loss
 
     print("***** Eval results *****")
     for key in sorted(result.keys()):

@@ -13,7 +13,7 @@ from order_flow_ast import JavaASTGraphVisitor, JavaASTLiteralNode, JavaASTBinar
 from transformers import AutoTokenizer, AutoModel
 
 from torch_geometric.data import HeteroData, Batch
-from torch_geometric.nn import HeteroConv, MessagePassing
+from torch_geometric.nn import HeteroConv, MessagePassing, GlobalAttention
 from torch_geometric.nn.dense.linear import Linear
 from torch_geometric.typing import Adj, OptPairTensor, OptTensor, Size
 from torch_geometric.utils import spmm
@@ -279,6 +279,9 @@ class GCM(nn.Module):
             ) for _ in range(num_layers)
         ])
 
+        self.mlp_gate=nn.Sequential(nn.Linear(hidden_dim,1),nn.Sigmoid())
+        self.pool=GlobalAttention(gate_nn=self.mlp_gate) 
+
     
     def cross_graph_attention(self, source_batch, target_batch, cross_attn):
         source_batches = source_batch["node"].batch
@@ -322,13 +325,13 @@ class GCM(nn.Module):
                 x_dict={"node": source_batch["node"].x},
                 edge_index_dict={("node", "edge", "node"): source_batch["node", "edge", "node"].edge_index},
                 edge_weight_dict={("node", "edge", "node"): source_batch["node", "edge", "node"].edge_attr}
-            )["node"].relu()
+            )["node"]
 
             target_x_updated = self.gnn_layers[i](
                 x_dict={"node": target_batch["node"].x},
                 edge_index_dict={("node", "edge", "node"): target_batch["node", "edge", "node"].edge_index},
                 edge_weight_dict={("node", "edge", "node"): target_batch["node", "edge", "node"].edge_attr}
-            )["node"].relu()
+            )["node"]
 
             source_batch["node"].x = source_x_updated.clone()
             target_batch["node"].x = target_x_updated.clone()
@@ -336,22 +339,26 @@ class GCM(nn.Module):
 
             self.cross_graph_attention(source_batch, target_batch, self.cross_attns[i])
 
-        match_scores = []
-        unique_batches = torch.unique(source_batch["node"].batch)
-        for batch_idx in unique_batches:
-            src_mask = source_batch["node"].batch == batch_idx
-            tgt_mask = target_batch["node"].batch == batch_idx
+        # match_scores = []
+        # unique_batches = torch.unique(source_batch["node"].batch)
+        # for batch_idx in unique_batches:
+        #     src_mask = source_batch["node"].batch == batch_idx
+        #     tgt_mask = target_batch["node"].batch == batch_idx
 
-            if src_mask.sum() > 0 and tgt_mask.sum() > 0:
-                src_nodes = source_batch["node"].x[src_mask].mean(dim=0)
-                tgt_nodes = target_batch["node"].x[tgt_mask].mean(dim=0)
-                # Tính toán dot product giữa các node embeddings
-                match_score = torch.dot(src_nodes, tgt_nodes) 
-                match_scores.append(match_score)
-            else:
-                match_scores.append(torch.tensor(0.0, device=self.device))
+            # src_nodes = source_batch["node"].x[src_mask].mean(dim=0)
+            # tgt_nodes = target_batch["node"].x[tgt_mask].mean(dim=0)
 
-        return torch.stack(match_scores) 
+            # Tính toán dot product giữa các node embeddings
+            # match_score = torch.cosine_similarity(src_nodes, tgt_nodes, dim=-1).to(dtype=src_nodes.dtype)
+            # match_score = torch.dot(src_nodes, tgt_nodes)
+            # match_scores.append(match_score)
+        
+        pooled_source = self.pool(source_batch["node"].x, source_batch["node"].batch)
+        pooled_target = self.pool(target_batch["node"].x, target_batch["node"].batch)
+        sim = torch.cosine_similarity(pooled_source, pooled_target, dim=-1)
+        # return torch.stack(match_scores) 
+        
+        return sim
 
 def build_model(config):
     with open(config['node_dict'], "r") as f:
@@ -399,6 +406,6 @@ if __name__ == '__main__':
         # print(i, result)
         mean_num_node = (mean_num_node*i + graph_list["node"].num_nodes) / (i+1)
         print(mean_num_node)
-                                             
+    
     print(f"Mean number of nodes: {mean_num_node}")
         

@@ -95,7 +95,12 @@ def prepare_batch(batch, idx_map, jsonl_dataset, device):
     code_batch_source = jsonl_dataset.select(sorted_indices_1)
     code_batch_target = jsonl_dataset.select(sorted_indices_2)
 
-    return code_batch_source, code_batch_target, torch.tensor(labels, dtype=float).to(device)
+    if isinstance(labels, list):
+        labels = torch.tensor(labels, dtype=torch.float).to(device)
+    else:
+        labels = labels.to(device, dtype=torch.float)
+
+    return code_batch_source, code_batch_target, labels
 
 def save_loss_plot(train_losses, val_losses, file_path):
     plt.figure(figsize=(10, 5))

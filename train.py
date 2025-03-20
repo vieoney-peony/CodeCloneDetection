@@ -11,7 +11,7 @@ from torch.amp import autocast
 from config import Config
 from dataset import build_dataset, PosNegSampler
 from modules import build_model, inference
-from loss import bce
+from loss import bce, cosine_similarity_loss
 from evaluation import eval
 
 from utils import set_seed, create_optimizer_scheduler_scaler, \
@@ -80,6 +80,8 @@ def init(config):
 def train_one_epoch(model, graph_creator, jsonl_dataset, 
                     idx_map, train_loader, pos_neg_sampler, batch_size,
                     optimizer, scheduler, scaler):
+    model.train()
+    graph_creator.train()
     total_loss = 0
 
     pbar = tqdm(
@@ -97,20 +99,24 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
         
         # get positive and negative samples
         pos_code_batch_source, pos_code_batch_target, pos_labels = prepare_batch(pos_batch, idx_map, jsonl_dataset, device)
-        # neg_code_batch_source, neg_code_batch_target, neg_labels = prepare_batch(neg_batch, idx_map, jsonl_dataset, device)
-        # pos_neg_labels = torch.cat([pos_labels, neg_labels], dim=0)
-        
+        neg_code_batch_source, neg_code_batch_target, neg_labels = prepare_batch(neg_batch, idx_map, jsonl_dataset, device)
+        pos_neg_labels = torch.cat([pos_labels, neg_labels], dim=0)
+
         with autocast(device_type=device.type, enabled=scaler is not None):
             logit = inference(graph_creator, model, code_batch_source, code_batch_target)
 
             pos_logit = inference(graph_creator, model, pos_code_batch_source, pos_code_batch_target)
-            # neg_logit = inference(graph_creator, model, neg_code_batch_source, neg_code_batch_target)
+            neg_logit = inference(graph_creator, model, neg_code_batch_source, neg_code_batch_target)
 
-            # pos_neg_logit = torch.cat([pos_logit, neg_logit], dim=0)
-
-            loss = bce(logit, labels)
-            # loss2 = bce(pos_neg_logit, pos_neg_labels)
-            loss2 = bce(pos_logit, pos_labels)
+            pos_neg_logit = torch.cat([pos_logit, neg_logit], dim=0)
+            
+            # loss calculation
+            loss = cosine_similarity_loss(logit, labels)
+            
+            # loss2 = 0
+            loss2 = cosine_similarity_loss(pos_neg_logit, pos_neg_labels)
+            # loss2 = cosine_similarity_loss(pos_logit, pos_labels)
+            # loss2 = cosine_similarity_loss(neg_logit, neg_labels)
 
         total_loss = (total_loss*i + loss.item()) / (i+1)
 
@@ -119,10 +125,11 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
         scaler.step(optimizer)
         scaler.update()
 
+        pbar.set_postfix({"Train loss": total_loss})
+
     if scheduler is not None:
         scheduler.step()
 
-    print(f"train loss: {total_loss}")
     return total_loss
     
     
@@ -148,9 +155,6 @@ def train(arg):
 
     for epoch in range(start_epoch, end_epoch):
         print(f"Epoch {epoch+1}/{end_epoch}")
-        model.train()
-        graph_creator.train()
-
         t_loss = train_one_epoch(model, graph_creator, jsonl_dataset, 
                                  idx_map, train_loader, pos_neg_sampler, batch_size,
                                  optimizer, scheduler, scaler)
