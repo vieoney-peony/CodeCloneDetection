@@ -99,23 +99,23 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
         
         # get positive and negative samples
         pos_code_batch_source, pos_code_batch_target, pos_labels = prepare_batch(pos_batch, idx_map, jsonl_dataset, device)
-        neg_code_batch_source, neg_code_batch_target, neg_labels = prepare_batch(neg_batch, idx_map, jsonl_dataset, device)
+        # neg_code_batch_source, neg_code_batch_target, neg_labels = prepare_batch(neg_batch, idx_map, jsonl_dataset, device)
         pos_neg_labels = torch.cat([pos_labels, neg_labels], dim=0)
 
         with autocast(device_type=device.type, enabled=scaler is not None):
             logit = inference(graph_creator, model, code_batch_source, code_batch_target)
 
             pos_logit = inference(graph_creator, model, pos_code_batch_source, pos_code_batch_target)
-            neg_logit = inference(graph_creator, model, neg_code_batch_source, neg_code_batch_target)
+            # neg_logit = inference(graph_creator, model, neg_code_batch_source, neg_code_batch_target)
 
-            pos_neg_logit = torch.cat([pos_logit, neg_logit], dim=0)
+            # pos_neg_logit = torch.cat([pos_logit, neg_logit], dim=0)
             
             # loss calculation
             loss = cosine_similarity_loss(logit, labels)
             
             # loss2 = 0
-            loss2 = cosine_similarity_loss(pos_neg_logit, pos_neg_labels)
-            # loss2 = cosine_similarity_loss(pos_logit, pos_labels)
+            # loss2 = cosine_similarity_loss(pos_neg_logit, pos_neg_labels)
+            loss2 = cosine_similarity_loss(pos_logit, pos_labels)
             # loss2 = cosine_similarity_loss(neg_logit, neg_labels)
 
         total_loss = (total_loss*i + loss.item()) / (i+1)
