@@ -3,7 +3,8 @@ edge_dict: './ast_edge.json'
 
 dataset:
   dataset: './BCB_dataset'
-  processed_codes: './Processed_BCB_code'
+  # processed_codes: './Processed_BCB_code'
+  processed_codes: 
 
   source_codes: 'data.jsonl'
   train: 'train.txt'

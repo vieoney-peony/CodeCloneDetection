@@ -16,5 +16,6 @@
     "NextUse": 14,
     "LeftOperand": 15,
     "RightOperand": 16,
-    "Value": 17
+    "Value": 17,
+    "MethodInvoke": 18
 }

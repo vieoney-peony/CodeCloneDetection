@@ -35,6 +35,10 @@ class JavaASTGraphVisitor:
         self.node_mapping = {}
         # Lưu thông tin biến (name -> VariableDeclarator)
         self.variable_map = {}
+        # Lưu thông tin method declaration (name -> MethodDeclaration)
+        self.method_map = {}
+        # Lưu thông tin type (name -> ReferenceType)
+        self.type_map = {}
         # Bộ đếm toàn cục để gán subindex cho mỗi node theo thứ tự duyệt
         self.visitation_counter = 0
 
@@ -175,22 +179,19 @@ class JavaASTGraphVisitor:
         
         var_name = node.member
         if node.qualifier:
-            # print(var_name, node.qualifier, type(node.qualifier), )
             var_name = node.qualifier + '.' + var_name
 
         current_obj = self.node_mapping.get(id(node)) # JavaASTNode
         
         if var_name in self.variable_map:
             var_decl_label_list = self.variable_map[var_name] # list of JavaASTNode
-            # if var_decl_label_list == []:
-            #     print(var_name)
-            #     print(node)
             var_decl_label = var_decl_label_list[-1]
             self.edges.append((var_decl_label, 'NextUse', current_obj))
-        
             self.variable_map[var_name].append(current_obj)
-        else:
-            self.variable_map[var_name] = [current_obj]
+        else: # reference to a system variable
+            current_obj.__class__ = JavaASTLiteralNode
+            current_obj.value = var_name
+            # self.variable_map[var_name] = [current_obj]
 
     def visit_BinaryOperation(self, node):
         """Xử lý phép toán nhị phân (BinaryOperation)"""
@@ -235,202 +236,108 @@ class JavaASTGraphVisitor:
         self.variable_map[var_name] = [current_obj]
         # print('FormalParameter:', var_name)
         self.generic_visit(node)
+    
+    def visit_TypeDeclaration(self, node):
+        current_obj = self.node_mapping.get(id(node))   
+        self.type_map[str(node.name)] = [current_obj]
+        self.generic_visit(node)
+
+    def visit_ReferenceType(self, node):
+        current_obj = self.node_mapping.get(id(node))
+        if node.name in self.type_map:
+            self.type_map[str(node.name)].append(current_obj)
+        else:
+            current_obj.__class__ = JavaASTLiteralNode
+            current_obj.value = str(node.name)
+
+        self.generic_visit(node)
+    
+    def visit_MethodDeclaration(self, node):
+        current_obj = self.node_mapping.get(id(node))
+        # current_obj.__class__ = JavaASTLiteralNode
+        # current_obj.value = node.name
+        self.variable_map[node.name] = [current_obj]
+        # print(node.name)
+        # print(node)
+        # print('##'*50)
+        self.generic_visit(node)
+
+    def visit_MethodInvocation(self, node):
+        current_obj = self.node_mapping.get(id(node))
+        member_name = node.member
+        
+        invoke_name = node.qualifier
+        invoke_obj = None
+
+        if invoke_name in self.variable_map:
+            invoke_obj = self.variable_map[invoke_name][0]
+        elif invoke_name in self.type_map:
+            invoke_obj = self.type_map[invoke_name][0]
+
+        if invoke_obj:
+            self.edges.append((invoke_obj, "MethodInvoke", current_obj))
+        elif invoke_name:
+            current_obj.__class__ = JavaASTLiteralNode
+            current_obj.value = invoke_name + '.' + member_name
+
+        self.generic_visit(node)
 
 
 # Ví dụ sử dụng:
 if __name__ == "__main__":
     # code = """
     # public class Example {
-    #     public static void main(String[] args) {
-    #         Data obj = new Data();
-    #         int x = obj.sub.value;  // Truy cập a.b.c
-            
-    #         // Gọi hàm có varargs (informal parameters)
-    #         printValues(1, 2, 3, 4, 5);
-    #     }
-
-    #     class Data {
-    #         SubData sub = new SubData();
-    #     }
-
-    #     class SubData {
-    #         int value = 42;
-    #     }
-
-    #     // Phương thức có varargs (informal parameters)
-    #     public static void printValues(int... numbers) {
-    #         for (int num : numbers) {
-    #             System.out.println(num);
-    #         }
+    #     private String storeEditionFile(InputStream in) throws IOException {
+    #         String datadir = getCqPropertiesBeanSpring().getDatadir() + File.separator + "attachments" + File.separator;
+    #         File attachmentsDir = new File(datadir);
+    #         attachmentsDir.mkdirs();
+    #         File storedEditionFile = File.createTempFile("edition_import_", ".tmp", attachmentsDir);
+    #         FileOutputStream out = new FileOutputStream(storedEditionFile);
+    #         IOUtils.copyLarge(in, out);
+    #         IOUtils.closeQuietly(out);
+    #         IOUtils.closeQuietly(in);
+    #         return storedEditionFile.getAbsolutePath();
     #     }
     # }
     # """
     code = """
-        public class DummyClass {
-        public static void main(String[] args) {
-                LogFrame.getInstance();
-                for (int i = 0; i < args.length; i++) {
-                    String arg = args[i];
-                    if (arg.trim().startsWith(DEBUG_PARAMETER_NAME + "=")) {
-                        properties.put(DEBUG_PARAMETER_NAME, arg.trim().substring(DEBUG_PARAMETER_NAME.length() + 1).trim());
-                        if (properties.getProperty(DEBUG_PARAMETER_NAME).toLowerCase().equals(DEBUG_TRUE)) {
-                            DEBUG = true;
-                        }
-                    } else if (arg.trim().startsWith(MODE_PARAMETER_NAME + "=")) {
-                        properties.put(MODE_PARAMETER_NAME, arg.trim().substring(MODE_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(AUTOCONNECT_PARAMETER_NAME + "=")) {
-                        properties.put(AUTOCONNECT_PARAMETER_NAME, arg.trim().substring(AUTOCONNECT_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(SITE_CONFIG_URL_PARAMETER_NAME + "=")) {
-                        properties.put(SITE_CONFIG_URL_PARAMETER_NAME, arg.trim().substring(SITE_CONFIG_URL_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(LOAD_PLUGINS_PARAMETER_NAME + "=")) {
-                        properties.put(LOAD_PLUGINS_PARAMETER_NAME, arg.trim().substring(LOAD_PLUGINS_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(ONTOLOGY_URL_PARAMETER_NAME + "=")) {
-                        properties.put(ONTOLOGY_URL_PARAMETER_NAME, arg.trim().substring(ONTOLOGY_URL_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(REPOSITORY_PARAMETER_NAME + "=")) {
-                        properties.put(REPOSITORY_PARAMETER_NAME, arg.trim().substring(REPOSITORY_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(ONTOLOGY_TYPE_PARAMETER_NAME + "=")) {
-                        properties.put(ONTOLOGY_TYPE_PARAMETER_NAME, arg.trim().substring(ONTOLOGY_TYPE_PARAMETER_NAME.length() + 1).trim());
-                        if (!(properties.getProperty(ONTOLOGY_TYPE_PARAMETER_NAME).equals(ONTOLOGY_TYPE_RDFXML) || properties.getProperty(ONTOLOGY_TYPE_PARAMETER_NAME).equals(ONTOLOGY_TYPE_TURTLE) || properties.getProperty(ONTOLOGY_TYPE_PARAMETER_NAME).equals(ONTOLOGY_TYPE_NTRIPPLES))) System.out.println("WARNING! Unknown ontology type: '" + properties.getProperty(ONTOLOGY_TYPE_PARAMETER_NAME) + "' (Known types are: '" + ONTOLOGY_TYPE_RDFXML + "', '" + ONTOLOGY_TYPE_TURTLE + "', '" + ONTOLOGY_TYPE_NTRIPPLES + "')");
-                    } else if (arg.trim().startsWith(OWLIMSERVICE_URL_PARAMETER_NAME + "=")) {
-                        properties.put(OWLIMSERVICE_URL_PARAMETER_NAME, arg.trim().substring(OWLIMSERVICE_URL_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(DOCSERVICE_URL_PARAMETER_NAME + "=")) {
-                        properties.put(DOCSERVICE_URL_PARAMETER_NAME, arg.trim().substring(DOCSERVICE_URL_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(DOC_ID_PARAMETER_NAME + "=")) {
-                        properties.put(DOC_ID_PARAMETER_NAME, arg.trim().substring(DOC_ID_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(ANNSET_NAME_PARAMETER_NAME + "=")) {
-                        properties.put(ANNSET_NAME_PARAMETER_NAME, arg.trim().substring(ANNSET_NAME_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(EXECUTIVE_SERVICE_URL_PARAMETER_NAME + "=")) {
-                        properties.put(EXECUTIVE_SERVICE_URL_PARAMETER_NAME, arg.trim().substring(EXECUTIVE_SERVICE_URL_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(USER_ID_PARAMETER_NAME + "=")) {
-                        properties.put(USER_ID_PARAMETER_NAME, arg.trim().substring(USER_ID_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(USER_PASSWORD_PARAMETER_NAME + "=")) {
-                        properties.put(USER_PASSWORD_PARAMETER_NAME, arg.trim().substring(USER_PASSWORD_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(EXECUTIVE_PROXY_FACTORY_PARAMETER_NAME + "=")) {
-                        properties.put(EXECUTIVE_PROXY_FACTORY_PARAMETER_NAME, arg.trim().substring(EXECUTIVE_PROXY_FACTORY_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(DOCSERVICE_PROXY_FACTORY_PARAMETER_NAME + "=")) {
-                        properties.put(DOCSERVICE_PROXY_FACTORY_PARAMETER_NAME, arg.trim().substring(DOCSERVICE_PROXY_FACTORY_PARAMETER_NAME.length() + 1).trim());
-                        RichUIUtils.setDocServiceProxyFactoryClassname(properties.getProperty(DOCSERVICE_PROXY_FACTORY_PARAMETER_NAME));
-                    } else if (arg.trim().startsWith(LOAD_ANN_SCHEMAS_NAME + "=")) {
-                        properties.put(LOAD_ANN_SCHEMAS_NAME, arg.trim().substring(LOAD_ANN_SCHEMAS_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(SELECT_AS_PARAMETER_NAME + "=")) {
-                        properties.put(SELECT_AS_PARAMETER_NAME, arg.trim().substring(SELECT_AS_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(SELECT_ANN_TYPES_PARAMETER_NAME + "=")) {
-                        properties.put(SELECT_ANN_TYPES_PARAMETER_NAME, arg.trim().substring(SELECT_ANN_TYPES_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(ENABLE_ONTOLOGY_EDITOR_PARAMETER_NAME + "=")) {
-                        properties.put(ENABLE_ONTOLOGY_EDITOR_PARAMETER_NAME, arg.trim().substring(ENABLE_ONTOLOGY_EDITOR_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(CLASSES_TO_HIDE_PARAMETER_NAME + "=")) {
-                        properties.put(CLASSES_TO_HIDE_PARAMETER_NAME, arg.trim().substring(CLASSES_TO_HIDE_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(CLASSES_TO_SHOW_PARAMETER_NAME + "=")) {
-                        properties.put(CLASSES_TO_SHOW_PARAMETER_NAME, arg.trim().substring(CLASSES_TO_SHOW_PARAMETER_NAME.length() + 1).trim());
-                    } else if (arg.trim().startsWith(ENABLE_APPLICATION_LOG_PARAMETER_NAME + "=")) {
-                        properties.put(ENABLE_APPLICATION_LOG_PARAMETER_NAME, arg.trim().substring(ENABLE_APPLICATION_LOG_PARAMETER_NAME.length() + 1).trim());
-                    } else {
-                        System.out.println("WARNING! Unknown or undefined parameter: '" + arg.trim() + "'");
-                    }
-                }
-                System.out.println(startupParamsToString());
-                if (properties.getProperty(MODE_PARAMETER_NAME) == null || (!(properties.getProperty(MODE_PARAMETER_NAME).toLowerCase().equals(POOL_MODE)) && !(properties.getProperty(MODE_PARAMETER_NAME).toLowerCase().equals(DIRECT_MODE)))) {
-                    String err = "Mandatory parameter '" + MODE_PARAMETER_NAME + "' must be defined and must have a value either '" + POOL_MODE + "' or '" + DIRECT_MODE + "'.\n\nApplication will exit.";
-                    System.out.println(err);
-                    JOptionPane.showMessageDialog(new JFrame(), err, "Error!", JOptionPane.ERROR_MESSAGE);
-                    System.exit(-1);
-                }
-                if (properties.getProperty(SITE_CONFIG_URL_PARAMETER_NAME) == null || properties.getProperty(SITE_CONFIG_URL_PARAMETER_NAME).length() == 0) {
-                    String err = "Mandatory parameter '" + SITE_CONFIG_URL_PARAMETER_NAME + "' is missing.\n\nApplication will exit.";
-                    System.out.println(err);
-                    JOptionPane.showMessageDialog(new JFrame(), err, "Error!", JOptionPane.ERROR_MESSAGE);
-                    System.exit(-1);
-                }
-                try {
-                    String context = System.getProperty(CONTEXT);
-                    if (context == null || "".equals(context)) {
-                        context = DEFAULT_CONTEXT;
-                    }
-                    String s = System.getProperty(GateConstants.GATE_HOME_PROPERTY_NAME);
-                    if (s == null || s.length() == 0) {
-                        File f = File.createTempFile("foo", "");
-                        String gateHome = f.getParent().toString() + context;
-                        f.delete();
-                        System.setProperty(GateConstants.GATE_HOME_PROPERTY_NAME, gateHome);
-                        f = new File(System.getProperty(GateConstants.GATE_HOME_PROPERTY_NAME));
-                        if (!f.exists()) {
-                            f.mkdirs();
-                        }
-                    }
-                    s = System.getProperty(GateConstants.PLUGINS_HOME_PROPERTY_NAME);
-                    if (s == null || s.length() == 0) {
-                        System.setProperty(GateConstants.PLUGINS_HOME_PROPERTY_NAME, System.getProperty(GateConstants.GATE_HOME_PROPERTY_NAME) + "/plugins");
-                        File f = new File(System.getProperty(GateConstants.PLUGINS_HOME_PROPERTY_NAME));
-                        if (!f.exists()) {
-                            f.mkdirs();
-                        }
-                    }
-                    s = System.getProperty(GateConstants.GATE_SITE_CONFIG_PROPERTY_NAME);
-                    if (s == null || s.length() == 0) {
-                        System.setProperty(GateConstants.GATE_SITE_CONFIG_PROPERTY_NAME, System.getProperty(GateConstants.GATE_HOME_PROPERTY_NAME) + "/gate.xml");
-                    }
-                    if (properties.getProperty(SITE_CONFIG_URL_PARAMETER_NAME) != null && properties.getProperty(SITE_CONFIG_URL_PARAMETER_NAME).length() > 0) {
-                        File f = new File(System.getProperty(GateConstants.GATE_SITE_CONFIG_PROPERTY_NAME));
-                        if (f.exists()) {
-                            f.delete();
-                        }
-                        f.getParentFile().mkdirs();
-                        f.createNewFile();
-                        URL url = new URL(properties.getProperty(SITE_CONFIG_URL_PARAMETER_NAME));
-                        InputStream is = url.openStream();
-                        FileOutputStream fos = new FileOutputStream(f);
-                        int i = is.read();
-                        while (i != -1) {
-                            fos.write(i);
-                            i = is.read();
-                        }
-                        fos.close();
-                        is.close();
-                    }
-                    try {
-                        Gate.init();
-                        gate.Main.applyUserPreferences();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                    s = BASE_PLUGIN_NAME + "," + properties.getProperty(LOAD_PLUGINS_PARAMETER_NAME);
-                    System.out.println("Loading plugins: " + s);
-                    loadPlugins(s, true);
-                    loadAnnotationSchemas(properties.getProperty(LOAD_ANN_SCHEMAS_NAME), true);
-                } catch (Throwable e) {
-                    e.printStackTrace();
-                }
-                MainFrame.getInstance().setVisible(true);
-                MainFrame.getInstance().pack();
-                if (properties.getProperty(MODE_PARAMETER_NAME).toLowerCase().equals(DIRECT_MODE)) {
-                    if (properties.getProperty(AUTOCONNECT_PARAMETER_NAME, "").toLowerCase().equals(AUTOCONNECT_TRUE)) {
-                        if (properties.getProperty(DOC_ID_PARAMETER_NAME) == null || properties.getProperty(DOC_ID_PARAMETER_NAME).length() == 0) {
-                            String err = "Can't autoconnect. A parameter '" + DOC_ID_PARAMETER_NAME + "' is missing.";
-                            System.out.println(err);
-                            JOptionPane.showMessageDialog(MainFrame.getInstance(), err, "Error!", JOptionPane.ERROR_MESSAGE);
-                            ActionShowDocserviceConnectDialog.getInstance().actionPerformed(null);
-                        } else {
-                            ActionConnectToDocservice.getInstance().actionPerformed(null);
-                        }
-                    } else {
-                        ActionShowDocserviceConnectDialog.getInstance().actionPerformed(null);
-                    }
-                } else {
-                    if (properties.getProperty(AUTOCONNECT_PARAMETER_NAME, "").toLowerCase().equals(AUTOCONNECT_TRUE)) {
-                        if (properties.getProperty(USER_ID_PARAMETER_NAME) == null || properties.getProperty(USER_ID_PARAMETER_NAME).length() == 0) {
-                            String err = "Can't autoconnect. A parameter '" + USER_ID_PARAMETER_NAME + "' is missing.";
-                            System.out.println(err);
-                            JOptionPane.showMessageDialog(MainFrame.getInstance(), err, "Error!", JOptionPane.ERROR_MESSAGE);
-                            ActionShowExecutiveConnectDialog.getInstance().actionPerformed(null);
-                        } else {
-                            ActionConnectToExecutive.getInstance().actionPerformed(null);
-                        }
-                    } else {
-                        ActionShowExecutiveConnectDialog.getInstance().actionPerformed(null);
-                    }
-                }
-            }
+    public class MethodReferenceTest {
+    
+        // Static method to be referenced
+        public static int staticParse(String s) {
+            return Integer.parseInt(s);
         }
+
+        // Instance method to be referenced
+        public int instanceParse(String s) {
+            return Integer.parseInt(s);
+        }
+
+        public static void main(String[] args) {
+            // 1️⃣ Static Method Reference
+            Function<String, Integer> staticRef = Integer::parseInt;
+            System.out.println("Static method reference result: " + staticRef.apply("123"));
+
+            // 2️⃣ Instance Method Reference (on an object)
+            MethodReferenceTest obj = new MethodReferenceTest();
+            Function<String, Integer> instanceRef = obj::instanceParse;
+            System.out.println("Instance method reference result: " + instanceRef.apply("456"));
+
+            // 3️⃣ Instance Method Reference (on a class)
+            Function<String, Integer> classRef = String::length;
+            System.out.println("Instance method on class reference: " + classRef.apply("Hello"));
+
+            // 4️⃣ Constructor Reference
+            Supplier<StringBuilder> constructorRef = StringBuilder::new;
+            System.out.println("Constructor reference created: " + constructorRef.get());
+
+            // 5️⃣ Method Reference with custom instance method
+            Function<String, Integer> customRef = obj::instanceParse;
+            int a = customRef("001");
+            File attachmentsDir = new File(datadir);
+            System.out.println("Custom method reference: " + customRef.apply("789"));
+        }
+    }
     """
     # Parse code Java thành AST bằng javalang
     ast_tree = javalang.parse.parse(code)
@@ -446,9 +353,9 @@ if __name__ == "__main__":
     
     # Ví dụ in ra các node với subindex
     # print("\nCác node đã duyệt:")
-    for node in visitor.node_mapping.values():
-        with open('test.txt','a') as f:
-            f.write(str(node.node)+'\n')
-            f.write('-'*50+'\n')
+    # for node in visitor.node_mapping.values():
+    #     with open('test.txt','a') as f:
+    #         f.write(str(node.node)+'\n')
+    #         f.write('-'*50+'\n')
         # print(node.node)
         # print('-'*50)

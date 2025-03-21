@@ -136,7 +136,8 @@ def build_dataset(config):
         batch_size=100  # Đọc 100 dòng một lần
     )
 
-    if dataset_config['processed_codes'] is not None:
+    if dataset_config['processed_codes'] is not None \
+            and os.path.exists(dataset_config['processed_codes']):
         jsonl_dataset = load_from_disk(dataset_config['processed_codes'])
     else:
         dataset_config['processed_codes'] = "Processed_BCB_code" # default
@@ -167,15 +168,15 @@ if __name__ == '__main__':
 
     config = Config('config.yaml')
     jsonl_dataset, txt_dataset = build_dataset(config)
-    idx_map = {v: i for i, v in enumerate(jsonl_dataset['idx'])}
-    print(txt_dataset['train'])
-    from torch.utils.data import DataLoader
-    trainloader = DataLoader(txt_dataset['test'], batch_size=2, shuffle=True)
+    # idx_map = {v: i for i, v in enumerate(jsonl_dataset['idx'])}
+    # print(txt_dataset['train'])
+    # from torch.utils.data import DataLoader
+    # trainloader = DataLoader(txt_dataset['test'], batch_size=2, shuffle=True)
 
-    print("Checking...")
-    for batch in trainloader:
-        for i in range(len(batch['idx1'])):
-            if batch['idx1'][i].item() not in idx_map and batch['idx2'][i].item() not in idx_map:
-                print(batch['idx1'][i], batch['idx2'][i])
-                exit(0)   
-        print("OK")
+    # print("Checking...")
+    # for batch in trainloader:
+    #     for i in range(len(batch['idx1'])):
+    #         if batch['idx1'][i].item() not in idx_map and batch['idx2'][i].item() not in idx_map:
+    #             print(batch['idx1'][i], batch['idx2'][i])
+    #             exit(0)   
+    #     print("OK")
