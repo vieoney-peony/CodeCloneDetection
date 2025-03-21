@@ -100,7 +100,7 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
         # get positive and negative samples
         pos_code_batch_source, pos_code_batch_target, pos_labels = prepare_batch(pos_batch, idx_map, jsonl_dataset, device)
         # neg_code_batch_source, neg_code_batch_target, neg_labels = prepare_batch(neg_batch, idx_map, jsonl_dataset, device)
-        pos_neg_labels = torch.cat([pos_labels, neg_labels], dim=0)
+        # pos_neg_labels = torch.cat([pos_labels, neg_labels], dim=0)
 
         with autocast(device_type=device.type, enabled=scaler is not None):
             logit = inference(graph_creator, model, code_batch_source, code_batch_target)
