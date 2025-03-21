@@ -252,6 +252,14 @@ class JavaASTGraphVisitor:
 
         self.generic_visit(node)
     
+    def visit_BasicType(self, node):
+        current_obj = self.node_mapping.get(id(node))
+        current_obj.__class__ = JavaASTLiteralNode
+        current_obj.value = str(node.name)
+        # print(node)
+        # print('##'*50)
+        self.generic_visit(node)
+    
     def visit_MethodDeclaration(self, node):
         current_obj = self.node_mapping.get(id(node))
         # current_obj.__class__ = JavaASTLiteralNode
@@ -309,8 +317,8 @@ if __name__ == "__main__":
         }
 
         // Instance method to be referenced
-        public int instanceParse(String s) {
-            return Integer.parseInt(s);
+        public String instanceParse(String s) {
+            return s;
         }
 
         public static void main(String[] args) {
