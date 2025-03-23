@@ -173,16 +173,17 @@ def train(arg):
         train_losses.append(t_loss)
         val_losses.append(result["eval_loss"])
 
-        writer.add_scalar("Loss/train", t_loss, epoch)
-        writer.add_scalar("Loss/eval", result["eval_loss"], epoch)
-        writer.add_scalar("F1/eval", result["eval_f1"], epoch)
-        writer.add_scalar("Precision/eval", result["eval_precision"], epoch)
-        writer.add_scalar("Recall/eval", result["eval_recall"], epoch)
+        writer.add_scalar("Train/loss", t_loss, epoch)
+        writer.add_scalar("Eval/loss", result["eval_loss"], epoch)
+        writer.add_scalar("Eval/F1", result["eval_f1"], epoch)
+        writer.add_scalar("Eval/Precision", result["eval_precision"], epoch)
+        writer.add_scalar("Eval/Recall", result["eval_recall"], epoch)
 
         save_loss_plot(train_losses, val_losses, loss_plot_path)
         
         print("-" * 50)
-
+        
+    writer.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Training")
