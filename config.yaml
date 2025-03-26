@@ -39,6 +39,6 @@ train:
     type: torch.optim.lr_scheduler.CosineAnnealingLR
     params:
       T_max: *epochs
-      eta_min: 0.0001
+      eta_min: 0.000001
   amp: true
 
