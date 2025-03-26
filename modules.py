@@ -216,47 +216,35 @@ class GraphCreator(nn.Module):
         device = next(self.parameters()).device
         data = HeteroData()
         
-        edge_index = torch.tensor([[e[0], e[2]] for e in orders], dtype=torch.long, device=device).t().contiguous()  # (2, len_cạnh)
+        edge_index = torch.tensor([[e[0], e[2]] for e in orders], dtype=torch.long, device=device).t().contiguous()
         data["node", "edge", "node"].edge_index = edge_index
 
-        edge_emb = node_edge_embedding[:, 1, :]
-        data["node", "edge", "node"].edge_attr = edge_emb
-        
-        node_emb_dict = {}
+        # Gán embedding của cạnh
+        data["node", "edge", "node"].edge_attr = node_edge_embedding[:, 1, :]
 
-        for i, (src, tgt) in enumerate(zip(edge_index[0].tolist(), edge_index[1].tolist())):
-            if src not in node_emb_dict:  # Lưu một lần duy nhất
-                node_emb_dict[src] = node_edge_embedding[i, 0, :]
-            if tgt not in node_emb_dict:
-                node_emb_dict[tgt] = node_edge_embedding[i, 2, :]
+        # Lấy các node duy nhất và ánh xạ
+        unique_nodes = torch.unique(edge_index.flatten())
+
+        # Tạo embedding tensor cho node
+        node_embs = torch.zeros((unique_nodes.size(0), node_edge_embedding.size(-1)), device=device)
         
-        # Chuyển dict thành tensor
-        _, node_embs = zip(*node_emb_dict.items())  # Tách keys và values
-        # node_tensor = torch.tensor(node_ids, dtype=torch.long, device=device)
-        node_emb_tensor = torch.stack(node_embs)  # (num_nodes, embed_dim)
-        data["node"].x = node_emb_tensor
-        data["node"].num_nodes = len(node_embs)
+        # print(edge_index[0, :].shape, node_edge_embedding.shape)
+        node_embs[edge_index[0, :]] = node_edge_embedding[:, 0, :]  # Source
+        node_embs[edge_index[1, :]] = node_edge_embedding[:, 2, :]  # Target
+
+        data["node"].x = node_embs
+        data["node"].num_nodes = unique_nodes.size(0)
 
         return data
 
-    def forward(self, edges: list, orders: list, values: list):
-        graph_list = []
-        # total_nodes = 0  # Offset tổng số node của các đồ thị trước đó
+    def forward(self, edges_list, orders_list, values_list):
+        def process_graph(edges, orders, values):
+            node_edge_embedding = (self.process_edge(edges) + 
+                                self.process_order(orders) + 
+                                self.process_value(values)) / 3
+            return self.get_hetero_data(orders, node_edge_embedding)
 
-        for edges, orders, values in zip(edges, orders, values):
-            processed_edge = self.process_edge(edges)
-            processed_order = self.process_order(orders)
-            processed_value = self.process_value(values)
-            node_edge_embedding = (processed_edge + processed_order + processed_value) / 3
-
-            graph_data = self.get_hetero_data(orders, node_edge_embedding)
-
-            # Cộng offset vào edge_index
-            graph_data["node", "edge", "node"].edge_index
-            # total_nodes += graph_data["node"].num_nodes  # Cập nhật tổng số node
-
-            graph_list.append(graph_data)
-
+        graph_list = list(map(process_graph, edges_list, orders_list, values_list))
         return Batch.from_data_list(graph_list)
             
 class GCM(nn.Module):
@@ -274,7 +262,7 @@ class GCM(nn.Module):
         
         self.cross_attns = nn.ModuleList([
             nn.Sequential(
-                nn.MultiheadAttention(hidden_dim, num_heads, batch_first=True),
+                nn.MultiheadAttention(hidden_dim, num_heads, batch_first=False),
                 nn.LayerNorm(hidden_dim)  # LayerNorm nên đặt ngoài, không trong danh sách []
             ) for _ in range(num_layers)
         ])
@@ -284,37 +272,32 @@ class GCM(nn.Module):
 
     
     def cross_graph_attention(self, source_batch, target_batch, cross_attn):
-        source_batches = source_batch["node"].batch
-        target_batches = target_batch["node"].batch
-        unique_batches = torch.unique(source_batches)
+        source_batches = source_batch["node"].batch  # (num_source_nodes,)
+        target_batches = target_batch["node"].batch  # (num_target_nodes,)
 
-        source_x = source_batch["node"].x
-        target_x = target_batch["node"].x
-
-        new_source_x = source_x.clone()
-        new_target_x = target_x.clone()
+        source_x = source_batch["node"].x  # (num_source_nodes, embed_dim)
+        target_x = target_batch["node"].x  # (num_target_nodes, embed_dim)
 
         attn_layer, norm_layer = cross_attn  
 
-        for batch_idx in unique_batches:
-            src_mask = source_batches == batch_idx
-            tgt_mask = target_batches == batch_idx
-            if src_mask.sum() > 0 and tgt_mask.sum() > 0:
-                src_nodes = source_x[src_mask].unsqueeze(0)  
-                tgt_nodes = target_x[tgt_mask].unsqueeze(0)  
+        # Tạo binary mask (src_len, tgt_len), 1 = chặn, 0 = cho phép
+        attn_mask = source_batches.view(-1, 1) != target_batches.view(1, -1)  # (src_len, tgt_len)
+        attn_mask = attn_mask.to(dtype=torch.bool, device=source_x.device)  # Định dạng chuẩn
 
-                attn_output, _ = attn_layer(src_nodes, tgt_nodes, tgt_nodes)  
-                attn_output_t, _ = attn_layer(tgt_nodes, src_nodes, src_nodes)  
+        # Thực hiện attention trên toàn bộ graph
+        attn_output, _ = attn_layer(source_x.unsqueeze(1), target_x.unsqueeze(1), target_x.unsqueeze(1), attn_mask=attn_mask)
+        attn_output_t, _ = attn_layer(target_x.unsqueeze(1), source_x.unsqueeze(1), source_x.unsqueeze(1), attn_mask=attn_mask.T)
 
-                new_source_x.index_copy_(0, src_mask.nonzero(as_tuple=True)[0], 
-                                         norm_layer(attn_output.squeeze(0)).to(dtype=new_source_x.dtype))
-                new_target_x.index_copy_(0, tgt_mask.nonzero(as_tuple=True)[0], 
-                                         norm_layer(attn_output_t.squeeze(0)).to(dtype=new_source_x.dtype))
+        # Chuẩn hóa output
+        new_source_x = norm_layer(attn_output.squeeze(1))
+        new_target_x = norm_layer(attn_output_t.squeeze(1))
 
+        # Cập nhật giá trị vào batch
         source_batch["node"].x = new_source_x
         target_batch["node"].x = new_target_x
 
         return source_batch, target_batch
+
 
     def forward(self, source_batch: Batch, target_batch: Batch):
         """
