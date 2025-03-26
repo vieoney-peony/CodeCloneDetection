@@ -32,13 +32,13 @@ train:
   optimizer:
     type: torch.optim.SGD
     params:
-      lr: 0.00001
+      lr: 1e-5
       momentum: 0.9
       weight_decay: 0.0005
   scheduler:
     type: torch.optim.lr_scheduler.CosineAnnealingLR
     params:
       T_max: *epochs
-      eta_min: 0.000001
+      eta_min: 1e-7
   amp: true
 
