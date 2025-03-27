@@ -29,7 +29,7 @@ log_dir: "runs"
 
 train:
   epochs: &epochs 20
-  max_iter: 5 # max iteration per epoch
+  max_iter: 5000 # max iteration per epoch
 
   optimizer:
     type: torch.optim.SGD
