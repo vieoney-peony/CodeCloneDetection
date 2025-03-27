@@ -172,7 +172,8 @@ def train(arg):
                                  optimizer, scheduler, scaler, max_iter)
 
 
-        result = eval(model, graph_creator, jsonl_dataset, idx_map, val_loader, batch_size, device)
+        result = eval(model, graph_creator, jsonl_dataset,
+                       idx_map, val_loader, batch_size, device, max_iter)
 
         
         # saving
