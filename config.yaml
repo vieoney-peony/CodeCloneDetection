@@ -29,16 +29,18 @@ log_dir: "runs"
 
 train:
   epochs: &epochs 20
+  max_iter: 1000 # max iteration per epoch
+
   optimizer:
     type: torch.optim.SGD
     params:
-      lr: 0.00001
+      lr: 0.0001
       momentum: 0.9
       weight_decay: 0.0005
   scheduler:
     type: torch.optim.lr_scheduler.CosineAnnealingLR
     params:
       T_max: *epochs
-      eta_min: 0.0000001
+      eta_min: 0.000001
   amp: true
 

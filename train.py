@@ -79,17 +79,25 @@ def init(config):
 
 def train_one_epoch(model, graph_creator, jsonl_dataset, 
                     idx_map, train_loader, pos_neg_sampler, batch_size,
-                    optimizer, scheduler, scaler):
+                    optimizer, scheduler, scaler, max_iter=None):
     model.train()
     graph_creator.train()
     total_loss = 0
 
-    pbar = tqdm(
-        enumerate(train_loader),
-        desc="Training",
-        total=len(train_loader),
-        bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
-    )
+    if max_iter is not None:
+        pbar = tqdm(
+            enumerate(train_loader),
+            desc="Training",
+            total=min(max_iter, len(train_loader)),
+            bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+        )
+    else:
+        pbar = tqdm(
+            enumerate(train_loader),
+            desc="Training",
+            total=len(train_loader),
+            bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+        )
 
     for i, batch in pbar:
         optimizer.zero_grad()
@@ -144,6 +152,7 @@ def train(arg):
 
     log_dir = writer.log_dir
     batch_size = config["dataset"]["batch_size"]
+    max_iter = config["train"]["max_iter"]
 
     best_val_loss = float("inf")
     last_model_path = os.path.join(log_dir, "last.pt")
@@ -157,7 +166,7 @@ def train(arg):
         print(f"Epoch {epoch+1}/{end_epoch}")
         t_loss = train_one_epoch(model, graph_creator, jsonl_dataset, 
                                  idx_map, train_loader, pos_neg_sampler, batch_size,
-                                 optimizer, scheduler, scaler)
+                                 optimizer, scheduler, scaler, max_iter)
 
 
         result = eval(model, graph_creator, jsonl_dataset, idx_map, val_loader, batch_size, device)
