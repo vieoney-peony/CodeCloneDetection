@@ -29,18 +29,27 @@ log_dir: "runs"
 
 train:
   epochs: &epochs 20
-  max_iter: 5000 # max iteration per epoch
+  max_iter: 2000 # max iteration per epoch
 
   optimizer:
-    type: torch.optim.SGD
+    type: torch.optim.AdamW
     params:
-      lr: 0.0001
-      momentum: 0.9
-      weight_decay: 0.0005
-  scheduler:
-    type: torch.optim.lr_scheduler.CosineAnnealingLR
-    params:
-      T_max: *epochs
-      eta_min: 0.000001
+      lr: 0.001  # Giữ nguyên learning rate
+      betas: [0.9, 0.999]  # Mặc định của AdamW
+      weight_decay: 0.0005  # Giữ nguyên weight decay
+
+  # optimizer:
+  #   type: torch.optim.SGD
+  #   params:
+  #     lr: 0.001
+  #     momentum: 0.9
+  #     weight_decay: 0.0005
+
+  # scheduler:
+  #   type: torch.optim.lr_scheduler.CosineAnnealingLR
+  #   params:
+  #     T_max: *epochs
+  #     eta_min: 0.00001
+
   amp: true
 

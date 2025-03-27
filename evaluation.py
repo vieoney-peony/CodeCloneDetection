@@ -19,19 +19,28 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def eval(model, graph_creator, jsonl_dataset, 
-            idx_map, val_loader, batch_size, device):
+            idx_map, val_loader, batch_size, 
+            device, max_iter=None):
     model.eval()
     graph_creator.eval()
     total_loss = 0
     logits=[]  
     y_trues=[]
     
-    pbar = tqdm(enumerate(val_loader), 
-                total=len(val_loader), 
-                bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
-                desc="Validating")
+    if max_iter is not None:
+        pbar = tqdm(enumerate(val_loader), 
+                    total=min(max_iter, len(val_loader)),
+                    bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+                    desc="Validating")
+    else:
+        pbar = tqdm(enumerate(val_loader), 
+                    total=len(val_loader), 
+                    bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+                    desc="Validating")
 
     for i, batch in pbar:
+        if max_iter is not None and i >= max_iter:
+            break
         with torch.no_grad():
             code_batch_source, code_batch_target, labels = prepare_batch(batch, idx_map, jsonl_dataset, device)
             logit = inference(graph_creator, model, code_batch_source, code_batch_target)
