@@ -102,8 +102,9 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
     for i, batch in pbar:
         if max_iter is not None and i >= max_iter:
             break
-        
+        torch.cuda.empty_cache()
         optimizer.zero_grad()
+        
         pos_batch, neg_batch = pos_neg_sampler.sample(batch_size)
         # get default samples
         code_batch_source, code_batch_target, labels = prepare_batch(batch, idx_map, jsonl_dataset, device)
