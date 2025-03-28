@@ -4,6 +4,7 @@ from typing import Tuple, Union
 import torch
 from torch import Tensor
 import torch.nn as nn
+import torch.nn.functional as F
 
 import math
 import json
@@ -338,6 +339,10 @@ class GCM(nn.Module):
         
         pooled_source = self.pool(source_batch["node"].x, source_batch["node"].batch)
         pooled_target = self.pool(target_batch["node"].x, target_batch["node"].batch)
+
+        pooled_source = F.normalize(pooled_source, p=2, dim=-1)
+        pooled_target = F.normalize(pooled_target, p=2, dim=-1)
+        
         sim = torch.cosine_similarity(pooled_source, pooled_target, dim=-1)
         # return torch.stack(match_scores) 
         

@@ -133,6 +133,9 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
 
         # Backward pass
         scaler.scale(loss + loss2).backward()
+        torch.nn.utils.clip_grad_norm_(list(model.parameters()) + 
+                                       list(graph_creator.parameters()), 
+                                       max_norm=3.0)
         scaler.step(optimizer)
         scaler.update()
 

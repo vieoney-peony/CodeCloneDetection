@@ -51,6 +51,7 @@ class JavaASTGraphVisitor:
             return
         
         if not isinstance(node, javalang.tree.Node):
+            # print('---', node, type(node))
             return
         # print('---',type(node))
         sub_index = self.visitation_counter
@@ -290,6 +291,21 @@ class JavaASTGraphVisitor:
 
         self.generic_visit(node)
 
+def print_ast(node, indent=0, key="root"):
+    """Duyệt đệ quy AST, in cả key và class với định dạng 'key: ClassName'"""
+    prefix = " " * indent + f"{key}: {node.__class__.__name__}" if isinstance(node, javalang.ast.Node) else " " * indent + f"{key}: {node}"
+
+    print(prefix)  # In key + class của node
+
+    if isinstance(node, javalang.ast.Node):
+        for name, child in node.__dict__.items():
+            if isinstance(child, list):  # Nếu là danh sách node con
+                for i, item in enumerate(child):
+                    print_ast(item, indent + 4, key=f"{name}[{i}]")  
+            elif isinstance(child, javalang.ast.Node):  # Nếu là node đơn lẻ
+                print_ast(child, indent + 4, key=name)
+            else:
+                print(f"{' ' * (indent + 4)}{name}: {child}")  # In giá trị đơn giản
 
 # Ví dụ sử dụng:
 if __name__ == "__main__":
@@ -344,12 +360,13 @@ if __name__ == "__main__":
             int a = customRef("001");
             File attachmentsDir = new File(datadir);
             System.out.println("Custom method reference: " + customRef.apply("789"));
+            System.out.println(Integer.MAX_VALUE);
         }
     }
     """
     # Parse code Java thành AST bằng javalang
     ast_tree = javalang.parse.parse(code)
-    # print(ast_tree)
+    print_ast(ast_tree)
     # Tạo visitor và duyệt AST
     visitor = JavaASTGraphVisitor()
     visitor.visit(ast_tree)
