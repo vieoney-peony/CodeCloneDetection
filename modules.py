@@ -123,8 +123,8 @@ class ASTValueEmbedding(nn.Module):
 
         # Giữ lại chỉ 1 layer Transformer đầu tiên và freeze model
         self.codebert.encoder.layer = self.codebert.encoder.layer[:1]
-        # for param in self.codebert.parameters():
-        #     param.requires_grad = False
+        for param in self.codebert.parameters():
+            param.requires_grad = False
 
         # Projection layer để giảm dimension
         self.proj = nn.Linear(768, embedding_dim)
