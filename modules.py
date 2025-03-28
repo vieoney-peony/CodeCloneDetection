@@ -97,7 +97,10 @@ class ASTValueEmbedding(nn.Module):
 
         # Chia nhỏ sentences thành batch nhỏ để tránh OOM
         for batch in self.chunk_list(sentences, self.batch_size):
-            inputs = self.tokenizer(batch, return_tensors="pt", padding=True, truncation=True).to(device)
+            inputs = self.tokenizer(batch, return_tensors="pt", 
+                                    padding=True, 
+                                    truncation=True, 
+                                    max_length=512).to(device)
             outputs = self.codebert(**inputs)
             batch_embedding = self.proj(outputs.last_hidden_state.mean(dim=1))
             embeddings.append(batch_embedding)
