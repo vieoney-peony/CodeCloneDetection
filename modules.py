@@ -62,75 +62,34 @@ def check_node_embedding(order, node_edge_embedding):
             node_emb_dict[tgt] = node_emb_tgt  # Lưu embedding đầu tiên
 
     print("✅ Kiểm tra hoàn tất!")
-
-class CustomedGraphConv(MessagePassing):
-    def __init__(
-        self,
-        in_channels: Union[int, Tuple[int, int]],
-        out_channels: int,
-        aggr: str = 'add',
-        bias: bool = True,
-        **kwargs,
-    ):
-        super().__init__(aggr=aggr, **kwargs)
-
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-
-        if isinstance(in_channels, int):
-            in_channels = (in_channels, in_channels)
-
-        self.lin_rel = Linear(in_channels[0], out_channels, bias=bias)
-        self.lin_root = Linear(in_channels[1], out_channels, bias=False)
-
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        super().reset_parameters()
-        self.lin_rel.reset_parameters()
-        self.lin_root.reset_parameters()
-
-
-    def forward(self, x: Union[Tensor, OptPairTensor], edge_index: Adj,
-                edge_weight: OptTensor = None, size: Size = None) -> Tensor:
-
-        if isinstance(x, Tensor):
-            x = (x, x)
-        assert x[0].size(1) == edge_weight.size(1)
-        
-
-        out = self.propagate(edge_index, x=x, edge_weight=edge_weight,
-                             size=size)
-        out = self.lin_rel(out)
-
-        x_r = x[1]
-        if x_r is not None:
-            out = out + self.lin_root(x_r)
-
-        return out
-
-    def message(self, x_j: Tensor, edge_weight: OptTensor) -> Tensor:
-        return x_j if edge_weight is None else edge_weight * x_j
-
-    def message_and_aggregate(self, adj_t: Adj, x: OptPairTensor) -> Tensor:
-        return spmm(adj_t, x[0], reduce=self.aggr)    
+ 
 
 class ASTValueEmbedding(nn.Module):
-    def __init__(self, pretrained='microsoft/codebert-base', cache_dir="./codebert_cache", embedding_dim=128, batch_size=128):
+    def __init__(self, pretrained="haisongzhang/roberta-tiny-cased", cache_dir="./codebert_cache", 
+                 embedding_dim=128, batch_size=128, num_layers_to_keep=1, freeze_encoder=False):
         super(ASTValueEmbedding, self).__init__()
+        
+        # Load tokenizer & model
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained, cache_dir=cache_dir)
         self.codebert = AutoModel.from_pretrained(pretrained, cache_dir=cache_dir)
+        
+        # Lấy số chiều hidden của mô hình RoBERTa hiện tại
+        hidden_dim = self.codebert.config.hidden_size  # Tự động lấy giá trị 768, 384 hoặc 256
+        # print(f"Hidden dimension: {hidden_dim}")
+        # Giữ lại số layers mong muốn
+        if num_layers_to_keep < len(self.codebert.encoder.layer):
+            self.codebert.encoder.layer = self.codebert.encoder.layer[:num_layers_to_keep]
 
-        # Giữ lại chỉ 1 layer Transformer đầu tiên và freeze model
-        self.codebert.encoder.layer = self.codebert.encoder.layer[:1]
-        for param in self.codebert.parameters():
-            param.requires_grad = False
+        # Freeze encoder nếu cần
+        if freeze_encoder:
+            for param in self.codebert.parameters():
+                param.requires_grad = False
 
         # Projection layer để giảm dimension
-        self.proj = nn.Linear(768, embedding_dim)
+        self.proj = nn.Linear(hidden_dim, embedding_dim)
 
-        # Batch size để chia nhỏ danh sách input
-        self.batch_size = batch_size  
+        # Batch size
+        self.batch_size = batch_size
 
     def forward(self, sentences):
         device = next(self.parameters()).device

@@ -309,61 +309,62 @@ def print_ast(node, indent=0, key="root"):
 
 # Ví dụ sử dụng:
 if __name__ == "__main__":
-    # code = """
-    # public class Example {
-    #     private String storeEditionFile(InputStream in) throws IOException {
-    #         String datadir = getCqPropertiesBeanSpring().getDatadir() + File.separator + "attachments" + File.separator;
-    #         File attachmentsDir = new File(datadir);
-    #         attachmentsDir.mkdirs();
-    #         File storedEditionFile = File.createTempFile("edition_import_", ".tmp", attachmentsDir);
-    #         FileOutputStream out = new FileOutputStream(storedEditionFile);
-    #         IOUtils.copyLarge(in, out);
-    #         IOUtils.closeQuietly(out);
-    #         IOUtils.closeQuietly(in);
-    #         return storedEditionFile.getAbsolutePath();
-    #     }
-    # }
-    # """
     code = """
-    public class MethodReferenceTest {
-    
-        // Static method to be referenced
-        public static int staticParse(String s) {
-            return Integer.parseInt(s);
-        }
-
-        // Instance method to be referenced
-        public String instanceParse(String s) {
-            return s;
-        }
-
-        public static void main(String[] args) {
-            // 1️⃣ Static Method Reference
-            Function<String, Integer> staticRef = Integer::parseInt;
-            System.out.println("Static method reference result: " + staticRef.apply("123"));
-
-            // 2️⃣ Instance Method Reference (on an object)
-            MethodReferenceTest obj = new MethodReferenceTest();
-            Function<String, Integer> instanceRef = obj::instanceParse;
-            System.out.println("Instance method reference result: " + instanceRef.apply("456"));
-
-            // 3️⃣ Instance Method Reference (on a class)
-            Function<String, Integer> classRef = String::length;
-            System.out.println("Instance method on class reference: " + classRef.apply("Hello"));
-
-            // 4️⃣ Constructor Reference
-            Supplier<StringBuilder> constructorRef = StringBuilder::new;
-            System.out.println("Constructor reference created: " + constructorRef.get());
-
-            // 5️⃣ Method Reference with custom instance method
-            Function<String, Integer> customRef = obj::instanceParse;
-            int a = customRef("001");
-            File attachmentsDir = new File(datadir);
-            System.out.println("Custom method reference: " + customRef.apply("789"));
-            System.out.println(Integer.MAX_VALUE);
+    public class Example {
+        public static void copy(File src, File dst) {
+            try (InputStream is = new BufferedInputStream(new FileInputStream(src), BUFFER_SIZE);
+                OutputStream os = new BufferedOutputStream(new FileOutputStream(dst), BUFFER_SIZE)) {
+                byte[] buffer = new byte[BUFFER_SIZE];
+                int len;
+                while ((len = is.read(buffer)) > 0) {
+                    os.write(buffer, 0, len);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
     """
+    # code = """
+    # public class MethodReferenceTest {
+    
+    #     // Static method to be referenced
+    #     public static int staticParse(String s) {
+    #         return Integer.parseInt(s);
+    #     }
+
+    #     // Instance method to be referenced
+    #     public String instanceParse(String s) {
+    #         return s;
+    #     }
+
+    #     public static void main(String[] args) {
+    #         // 1️⃣ Static Method Reference
+    #         Function<String, Integer> staticRef = Integer::parseInt;
+    #         System.out.println("Static method reference result: " + staticRef.apply("123"));
+
+    #         // 2️⃣ Instance Method Reference (on an object)
+    #         MethodReferenceTest obj = new MethodReferenceTest();
+    #         Function<String, Integer> instanceRef = obj::instanceParse;
+    #         System.out.println("Instance method reference result: " + instanceRef.apply("456"));
+
+    #         // 3️⃣ Instance Method Reference (on a class)
+    #         Function<String, Integer> classRef = String::length;
+    #         System.out.println("Instance method on class reference: " + classRef.apply("Hello"));
+
+    #         // 4️⃣ Constructor Reference
+    #         Supplier<StringBuilder> constructorRef = StringBuilder::new;
+    #         System.out.println("Constructor reference created: " + constructorRef.get());
+
+    #         // 5️⃣ Method Reference with custom instance method
+    #         Function<String, Integer> customRef = obj::instanceParse;
+    #         int a = customRef("001");
+    #         File attachmentsDir = new File(datadir);
+    #         System.out.println("Custom method reference: " + customRef.apply("789"));
+    #         System.out.println(Integer.MAX_VALUE);
+    #     }
+    # }
+    # """
     # Parse code Java thành AST bằng javalang
     ast_tree = javalang.parse.parse(code)
     print_ast(ast_tree)
