@@ -14,7 +14,7 @@ from order_flow_ast import JavaASTGraphVisitor, JavaASTLiteralNode, JavaASTBinar
 from transformers import AutoTokenizer, AutoModel
 
 from torch_geometric.data import HeteroData, Batch
-from torch_geometric.nn import HeteroConv, MessagePassing, GlobalAttention
+from torch_geometric.nn import HeteroConv, MessagePassing, GlobalAttention, GENConv
 from torch_geometric.nn.dense.linear import Linear
 from torch_geometric.typing import Adj, OptPairTensor, OptTensor, Size
 from torch_geometric.utils import spmm
@@ -254,11 +254,10 @@ class GCM(nn.Module):
         self.num_layers = num_layers
         self.num_heads = num_heads
         self.gnn_layers = nn.ModuleList([
-            HeteroConv({
-                ("node", "edge", "node"): CustomedGraphConv(in_dim if i == 0 else hidden_dim, 
-                                                            hidden_dim, 
-                                                            aggr="mean")
-            }, aggr="mean") for i in range(num_layers)
+            GENConv(in_dim if i == 0 else hidden_dim, 
+                            hidden_dim, 
+                            aggr="mean")
+            for i in range(num_layers)
         ])
         
         self.cross_attns = nn.ModuleList([
@@ -304,24 +303,25 @@ class GCM(nn.Module):
         """
         source_batch, target_batch: Batch của HeteroData chứa nhiều đồ thị
         """
+
         for i in range(self.num_layers):
             source_x_updated = self.gnn_layers[i](
-                x_dict={"node": source_batch["node"].x},
-                edge_index_dict={("node", "edge", "node"): source_batch["node", "edge", "node"].edge_index},
-                edge_weight_dict={("node", "edge", "node"): source_batch["node", "edge", "node"].edge_attr}
-            )["node"]
+                x=source_batch["node"].x,
+                edge_index=source_batch["node", "edge", "node"].edge_index,
+                edge_attr=source_batch["node", "edge", "node"].edge_attr
+            )
 
             target_x_updated = self.gnn_layers[i](
-                x_dict={"node": target_batch["node"].x},
-                edge_index_dict={("node", "edge", "node"): target_batch["node", "edge", "node"].edge_index},
-                edge_weight_dict={("node", "edge", "node"): target_batch["node", "edge", "node"].edge_attr}
-            )["node"]
+                x=target_batch["node"].x,
+                edge_index=target_batch["node", "edge", "node"].edge_index,
+                edge_attr=target_batch["node", "edge", "node"].edge_attr
+            )
 
             source_batch["node"].x = source_x_updated.clone()
             target_batch["node"].x = target_x_updated.clone()
-            # print(source_batch["node"].x - target_batch["node"].x)
-
+            
             self.cross_graph_attention(source_batch, target_batch, self.cross_attns[i])
+            # print(source_batch["node"].x)
 
         # match_scores = []
         # unique_batches = torch.unique(source_batch["node"].batch)
@@ -336,10 +336,10 @@ class GCM(nn.Module):
             # match_score = torch.cosine_similarity(src_nodes, tgt_nodes, dim=-1).to(dtype=src_nodes.dtype)
             # match_score = torch.dot(src_nodes, tgt_nodes)
             # match_scores.append(match_score)
-        
+
         pooled_source = self.pool(source_batch["node"].x, source_batch["node"].batch)
         pooled_target = self.pool(target_batch["node"].x, target_batch["node"].batch)
-
+        # print(pooled_source)
         pooled_source = F.normalize(pooled_source, p=2, dim=-1)
         pooled_target = F.normalize(pooled_target, p=2, dim=-1)
 
@@ -389,11 +389,11 @@ if __name__ == '__main__':
         values = batch["values"]
         
         graph_list = graph_creator(edges, orders, values)
-        # graph_list2 = graph_creator(edges, orders, values)
-        # result = model(graph_list, graph_list2)
-        # print(i, result)
-        mean_num_node = (mean_num_node*i + graph_list["node"].num_nodes) / (i+1)
-        print(mean_num_node)
+        graph_list2 = graph_creator(edges, orders, values)
+        result = model(graph_list, graph_list2)
+        print(i, result)
+        # mean_num_node = (mean_num_node*i + graph_list["node"].num_nodes) / (i+1)
+        # print(mean_num_node)
     
-    print(f"Mean number of nodes: {mean_num_node}")
+    # print(f"Mean number of nodes: {mean_num_node}")
         
