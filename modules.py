@@ -236,12 +236,9 @@ class GCM(nn.Module):
         self.pool = GlobalAttention(gate_nn=self.mlp_gate) 
         self.cls_head = nn.Linear(hidden_dim*2, 2) 
     
-    def cross_graph_attention(self, source_batch, target_batch, cross_attn):
-        source_batches = source_batch["node"].batch  # (num_source_nodes,)
-        target_batches = target_batch["node"].batch  # (num_target_nodes,)
-
-        source_x = source_batch["node"].x  # (num_source_nodes, embed_dim)
-        target_x = target_batch["node"].x  # (num_target_nodes, embed_dim)
+    def cross_graph_attention(self, source_output, target_output, cross_attn):
+        source_x, target_x = source_output['x'], target_output['x']
+        source_batches, target_batches = source_output['batch'], target_output['batch']
 
         attn_layer, norm_layer = cross_attn  
 
@@ -254,38 +251,49 @@ class GCM(nn.Module):
         attn_output_t, _ = attn_layer(target_x.unsqueeze(1), source_x.unsqueeze(1), source_x.unsqueeze(1), attn_mask=attn_mask.T)
 
         # Chuẩn hóa output
-        new_source_x = norm_layer(attn_output.squeeze(1))
-        new_target_x = norm_layer(attn_output_t.squeeze(1))
+        source_x = norm_layer(attn_output.squeeze(1))
+        target_x = norm_layer(attn_output_t.squeeze(1))
 
-        # Cập nhật giá trị vào batch
-        source_batch["node"].x = new_source_x
-        target_batch["node"].x = new_target_x
-
-        return source_batch, target_batch
+        return source_x, target_x
 
 
     def forward(self, source_batch: Batch, target_batch: Batch):
         """
         source_batch, target_batch: Batch của HeteroData chứa nhiều đồ thị
         """
+        x_source = source_batch["node"].x
+        edges_index_source = source_batch["node", "edge", "node"].edge_index
+        edges_attr_source = source_batch["node", "edge", "node"].edge_attr
+        batch_size_source = source_batch["node"].batch
+
+        x_target = target_batch["node"].x
+        edges_index_target = target_batch["node", "edge", "node"].edge_index
+        edges_attr_target = target_batch["node", "edge", "node"].edge_attr
+        batch_size_target = target_batch["node"].batch
 
         for i in range(self.num_layers):
-            source_x_updated = self.gnn_layers[i](
-                x=source_batch["node"].x,
-                edge_index=source_batch["node", "edge", "node"].edge_index,
-                edge_attr=source_batch["node", "edge", "node"].edge_attr
+            x_source = self.gnn_layers[i](
+                x=x_source,
+                edge_index=edges_index_source,
+                edge_attr=edges_attr_source
             )
 
-            target_x_updated = self.gnn_layers[i](
-                x=target_batch["node"].x,
-                edge_index=target_batch["node", "edge", "node"].edge_index,
-                edge_attr=target_batch["node", "edge", "node"].edge_attr
+            x_target = self.gnn_layers[i](
+                x=x_target,
+                edge_index=edges_index_target,
+                edge_attr=edges_attr_target
             )
 
-            source_batch["node"].x = source_x_updated.clone()
-            target_batch["node"].x = target_x_updated.clone()
+            source_output = {"x": x_source, 
+                            "edge_index": edges_index_source, 
+                            "edge_attr": edges_attr_source, 
+                            "batch": batch_size_source}
+            target_output = {"x": x_target,
+                            "edge_index": edges_index_target, 
+                            "edge_attr": edges_attr_target, 
+                            "batch": batch_size_target}
             
-            self.cross_graph_attention(source_batch, target_batch, self.cross_attns[i])
+            x_source, x_target = self.cross_graph_attention(source_output, target_output, self.cross_attns[i])
             # print(source_batch["node"].x)
 
         # match_scores = []
@@ -302,13 +310,13 @@ class GCM(nn.Module):
             # match_score = torch.dot(src_nodes, tgt_nodes)
             # match_scores.append(match_score)
 
-        pooled_source = self.pool(source_batch["node"].x, source_batch["node"].batch)
-        pooled_target = self.pool(target_batch["node"].x, target_batch["node"].batch)
+        pooled_source = self.pool(x_source, batch_size_source)
+        pooled_target = self.pool(x_target, batch_size_target)
         # print(pooled_source)
         # pooled_source = F.normalize(pooled_source, p=2, dim=-1)
         # pooled_target = F.normalize(pooled_target, p=2, dim=-1)
 
-        # sim = torch.cosine_similarity(pooled_source, pooled_target, dim=-1)
+        # out = torch.cosine_similarity(pooled_source, pooled_target, dim=-1)
         # return torch.stack(match_scores) 
         out = torch.softmax(self.cls_head(torch.cat([pooled_source, pooled_target], dim=-1)), dim=-1)
 
