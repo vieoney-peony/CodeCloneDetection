@@ -3,6 +3,7 @@ import argparse
 import pytz
 import datetime
 from tqdm import tqdm
+import random
 
 import torch
 from torch.utils.data import DataLoader
@@ -34,6 +35,10 @@ def init(config):
 
     train_txt = txt_dataset['train']
     val_txt = txt_dataset['valid']
+
+    # Chọn ngẫu nhiên 10% dữ liệu từ tập validation để kiểm tra
+    random_indices = random.sample(range(len(val_txt)), int(len(val_txt)*0.1))
+    val_txt = val_txt.select(random_indices)
 
     train_loader = DataLoader(train_txt, batch_size=config["dataset"]["batch_size"], shuffle=True)
     val_loader = DataLoader(val_txt, batch_size=config["dataset"]["batch_size"], shuffle=False)
@@ -177,7 +182,7 @@ def train(arg):
 
 
         result = eval(model, graph_creator, jsonl_dataset,
-                       idx_map, val_loader, batch_size, device, max_iter)
+                       idx_map, val_loader, batch_size, device)
 
         
         # saving
