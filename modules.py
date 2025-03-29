@@ -224,7 +224,7 @@ class GCM(nn.Module):
         self.gnn_layers = nn.ModuleList([
             GENConv(in_dim if i == 0 else hidden_dim, 
                             hidden_dim, 
-                            aggr="mean")
+                            )
             for i in range(num_layers)
         ])
         
