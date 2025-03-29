@@ -109,6 +109,7 @@ def save_loss_plot(train_losses, val_losses, file_path):
         train_losses,
         label="Train Loss",
         color="blue",
+        marker="o",
         linestyle="-",
     )
     plt.plot(
@@ -116,6 +117,7 @@ def save_loss_plot(train_losses, val_losses, file_path):
         val_losses,
         label="Validation Loss",
         color="orange",
+        marker="o",
         linestyle="-",
     )
     plt.xlabel("Epoch")
