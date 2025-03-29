@@ -101,7 +101,7 @@ class ASTValueEmbedding(nn.Module):
         attention_mask = encoded_inputs["attention_mask"].to(device)  # (batch_size, seq_len)
 
         # Lookup embedding
-        token_embeddings = self.embedding(input_ids)  # (batch_size, seq_len, embedding_dim)
+        token_embeddings = self.proj(self.embedding(input_ids))  # (batch_size, seq_len, embedding_dim)
 
         # Tính tổng embedding nhưng bỏ qua padding bằng cách nhân với attention_mask
         masked_embeddings = token_embeddings * attention_mask.unsqueeze(-1)  # (batch_size, seq_len, embedding_dim)

@@ -180,10 +180,8 @@ def train(arg):
                                  idx_map, train_loader, pos_neg_sampler, batch_size,
                                  optimizer, scheduler, scaler, max_iter)
 
-
         result = eval(model, graph_creator, jsonl_dataset,
                        idx_map, val_loader, batch_size, device)
-
         
         # saving
         if result['eval_loss'] < best_val_loss:
