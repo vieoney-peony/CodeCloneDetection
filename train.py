@@ -145,7 +145,7 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
         scaler.step(optimizer)
         scaler.update()
 
-        pbar.set_postfix({"Train loss": total_loss})
+        pbar.set_postfix({"Train loss": f"{total_loss:.6f}"})
 
     if scheduler is not None:
         scheduler.step()
