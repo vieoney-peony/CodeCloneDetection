@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from config import Config
 from modules import build_model, inference
 from dataset import build_dataset
-from loss import bce, cosine_similarity_loss
+from loss import bce, cosine_similarity_loss, ce
 from metrics import calculate_metrics
 from utils import set_seed, load_checkpoint, prepare_batch
 
@@ -45,7 +45,8 @@ def eval(model, graph_creator, jsonl_dataset,
             code_batch_source, code_batch_target, labels = prepare_batch(batch, idx_map, jsonl_dataset, device)
             logit = inference(graph_creator, model, code_batch_source, code_batch_target)
             
-            loss = cosine_similarity_loss(logit, labels)
+            # loss = cosine_similarity_loss(logit, labels)
+            loss = ce(logit, labels.long())
 
             total_loss = (total_loss*i + loss.item()) / (i+1)
 

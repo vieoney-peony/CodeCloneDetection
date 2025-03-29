@@ -130,9 +130,9 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
             # loss calculation
             loss = ce(logit, labels.long())
             
-            # loss2 = 0
+            loss2 = 0
             # loss2 = cosine_similarity_loss(pos_neg_logit, pos_neg_labels)
-            loss2 = ce(pos_logit, pos_labels.long())
+            # loss2 = ce(pos_logit, pos_labels.long())
             # loss2 = cosine_similarity_loss(neg_logit, neg_labels)
 
         total_loss = (total_loss*i + loss.item()) / (i+1)
