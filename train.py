@@ -36,8 +36,8 @@ def init(config):
     train_txt = txt_dataset['train']
     val_txt = txt_dataset['valid']
 
-    # Chọn ngẫu nhiên 10% dữ liệu từ tập validation để kiểm tra
-    random_indices = random.sample(range(len(val_txt)), int(len(val_txt)*0.1))
+    # Chọn ngẫu nhiên 5% dữ liệu từ tập validation để kiểm tra
+    random_indices = random.sample(range(len(val_txt)), int(len(val_txt)*0.05))
     val_txt = val_txt.select(random_indices)
 
     train_loader = DataLoader(train_txt, batch_size=config["dataset"]["batch_size"], shuffle=True)
@@ -110,19 +110,19 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
         torch.cuda.empty_cache()
         optimizer.zero_grad()
         
-        pos_batch, neg_batch = pos_neg_sampler.sample(batch_size)
+        # pos_batch, neg_batch = pos_neg_sampler.sample(batch_size)
         # get default samples
         code_batch_source, code_batch_target, labels = prepare_batch(batch, idx_map, jsonl_dataset, device)
         
         # get positive and negative samples
-        pos_code_batch_source, pos_code_batch_target, pos_labels = prepare_batch(pos_batch, idx_map, jsonl_dataset, device)
+        # pos_code_batch_source, pos_code_batch_target, pos_labels = prepare_batch(pos_batch, idx_map, jsonl_dataset, device)
         # neg_code_batch_source, neg_code_batch_target, neg_labels = prepare_batch(neg_batch, idx_map, jsonl_dataset, device)
         # pos_neg_labels = torch.cat([pos_labels, neg_labels], dim=0)
 
         with autocast(device_type=device.type, enabled=scaler is not None):
             logit = inference(graph_creator, model, code_batch_source, code_batch_target)
 
-            pos_logit = inference(graph_creator, model, pos_code_batch_source, pos_code_batch_target)
+            # pos_logit = inference(graph_creator, model, pos_code_batch_source, pos_code_batch_target)
             # neg_logit = inference(graph_creator, model, neg_code_batch_source, neg_code_batch_target)
 
             # pos_neg_logit = torch.cat([pos_logit, neg_logit], dim=0)
