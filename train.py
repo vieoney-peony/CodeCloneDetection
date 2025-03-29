@@ -12,7 +12,7 @@ from torch.amp import autocast
 from config import Config
 from dataset import build_dataset, PosNegSampler
 from modules import build_model, inference
-from loss import bce, cosine_similarity_loss
+from loss import bce, cosine_similarity_loss, ce
 from evaluation import eval
 
 from utils import set_seed, create_optimizer_scheduler_scaler, \
@@ -128,11 +128,11 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
             # pos_neg_logit = torch.cat([pos_logit, neg_logit], dim=0)
             
             # loss calculation
-            loss = cosine_similarity_loss(logit, labels)
+            loss = ce(logit, labels.long())
             
             # loss2 = 0
             # loss2 = cosine_similarity_loss(pos_neg_logit, pos_neg_labels)
-            loss2 = cosine_similarity_loss(pos_logit, pos_labels)
+            loss2 = ce(pos_logit, pos_labels.long())
             # loss2 = cosine_similarity_loss(neg_logit, neg_labels)
 
         total_loss = (total_loss*i + loss.item()) / (i+1)

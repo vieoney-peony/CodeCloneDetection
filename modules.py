@@ -232,9 +232,9 @@ class GCM(nn.Module):
             ) for _ in range(num_layers)
         ])
 
-        self.mlp_gate=nn.Sequential(nn.Linear(hidden_dim,1),nn.Sigmoid())
-        self.pool=GlobalAttention(gate_nn=self.mlp_gate) 
-
+        self.mlp_gate = nn.Sequential(nn.Linear(hidden_dim,1),nn.Sigmoid())
+        self.pool = GlobalAttention(gate_nn=self.mlp_gate) 
+        self.cls_head = nn.Linear(hidden_dim*2, 2) 
     
     def cross_graph_attention(self, source_batch, target_batch, cross_attn):
         source_batches = source_batch["node"].batch  # (num_source_nodes,)
@@ -305,13 +305,14 @@ class GCM(nn.Module):
         pooled_source = self.pool(source_batch["node"].x, source_batch["node"].batch)
         pooled_target = self.pool(target_batch["node"].x, target_batch["node"].batch)
         # print(pooled_source)
-        pooled_source = F.normalize(pooled_source, p=2, dim=-1)
-        pooled_target = F.normalize(pooled_target, p=2, dim=-1)
+        # pooled_source = F.normalize(pooled_source, p=2, dim=-1)
+        # pooled_target = F.normalize(pooled_target, p=2, dim=-1)
 
-        sim = torch.cosine_similarity(pooled_source, pooled_target, dim=-1)
+        # sim = torch.cosine_similarity(pooled_source, pooled_target, dim=-1)
         # return torch.stack(match_scores) 
-        
-        return sim
+        out = torch.softmax(self.cls_head(torch.cat([pooled_source, pooled_target], dim=-1)), dim=-1)
+
+        return out
 
 def build_model(config):
     with open(config['node_dict'], "r") as f:

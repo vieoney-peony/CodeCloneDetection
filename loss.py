@@ -4,6 +4,8 @@ import torch.nn.functional as F
 
 bce = nn.BCEWithLogitsLoss()
 
+ce = nn.CrossEntropyLoss()
+
 mse = nn.MSELoss()
 
 rmse = lambda x, y: torch.sqrt(mse(x, y))
