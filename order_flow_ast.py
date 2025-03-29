@@ -1,4 +1,7 @@
 import javalang
+import logging
+
+logging.basicConfig(filename="graph.txt", level=logging.INFO, format="%(message)s", filemode="w")
 
 class JavaASTNode:
     def __init__(self, node: javalang.tree.Node, sub_index: int = 0):
@@ -179,8 +182,6 @@ class JavaASTGraphVisitor:
         # self.variable_map[var_name].pop()
         
     def visit_MemberReference(self, node):
-        self.generic_visit(node)
-        
         var_name = node.member
         if node.qualifier:
             var_name = node.qualifier + '.' + var_name
@@ -196,6 +197,8 @@ class JavaASTGraphVisitor:
             current_obj.__class__ = JavaASTLiteralNode
             current_obj.value = var_name
             # self.variable_map[var_name] = [current_obj]
+
+        self.generic_visit(node)
 
     def visit_BinaryOperation(self, node):
         """Xử lý phép toán nhị phân (BinaryOperation)"""
@@ -218,13 +221,13 @@ class JavaASTGraphVisitor:
     
     def visit_Literal(self, node):
         """Xử lý node là literal"""
-        self.generic_visit(node)
         value = node.value
         current_obj = self.node_mapping.get(id(node))
         current_obj.__class__ = JavaASTLiteralNode
         current_obj.value = value
         parent_obj = self.parent_stack[-2]
         self.edges.append((parent_obj, "Value", current_obj))
+        self.generic_visit(node)
     
     def visit_FormalParameter(self, node):
         var_name = node.name
@@ -280,19 +283,31 @@ class JavaASTGraphVisitor:
         
         invoke_name = node.qualifier
         invoke_obj = None
-
+        
         if invoke_name in self.variable_map:
             invoke_obj = self.variable_map[invoke_name][0]
             self.variable_map[invoke_name].append(current_obj)
         elif invoke_name in self.type_map:
             invoke_obj = self.type_map[invoke_name][0]
             self.type_map[invoke_name].append(current_obj)
+            
+        # if invoke_name == 'arg':
+        #     print('arg', current_obj, invoke_obj, invoke_name, member_name)
 
         if invoke_obj:
             self.edges.append((invoke_obj, "MethodInvoke", current_obj))
-        elif invoke_name:
+
+        if invoke_name is not None and \
+            invoke_name not in self.variable_map and \
+                invoke_name not in self.type_map:
             current_obj.__class__ = JavaASTLiteralNode
-            current_obj.value = invoke_name + '.' + member_name
+            current_obj.value = invoke_name
+            if member_name not in self.variable_map and member_name not in self.type_map:
+                current_obj.value += '.' + member_name
+        else:
+            if member_name not in self.variable_map and member_name not in self.type_map:
+                current_obj.__class__ = JavaASTLiteralNode
+                current_obj.value = '.' + member_name
 
         self.generic_visit(node)
     
@@ -314,7 +329,7 @@ def print_ast(node, indent=0, key="root"):
     """Duyệt đệ quy AST, in cả key và class với định dạng 'key: ClassName'"""
     prefix = " " * indent + f"{key}: {node.__class__.__name__}" if isinstance(node, javalang.ast.Node) else " " * indent + f"{key}: {node}"
 
-    print(prefix)  # In key + class của node
+    logging.info(prefix)  # In key + class của node
 
     if isinstance(node, javalang.ast.Node):
         for name, child in node.__dict__.items():
@@ -324,7 +339,7 @@ def print_ast(node, indent=0, key="root"):
             elif isinstance(child, javalang.ast.Node):  # Nếu là node đơn lẻ
                 print_ast(child, indent + 4, key=name)
             else:
-                print(f"{' ' * (indent + 4)}{name}: {child}")  # In giá trị đơn giản
+                logging.info(f"{' ' * (indent + 4)}{name}: {child}")  # In giá trị đơn giản
 
 # Ví dụ sử dụng:
 if __name__ == "__main__":
@@ -385,18 +400,21 @@ if __name__ == "__main__":
     # }
     # """
     # Parse code Java thành AST bằng javalang
-    ast_tree = javalang.parse.parse(code)
+    from datasets import load_from_disk
+    jsonl_dataset = load_from_disk('Processed_BCB_code')
+    # print(jsonl_dataset['func'][0])
+    ast_tree = javalang.parse.parse(jsonl_dataset['func'][0])
     print_ast(ast_tree)
     # Tạo visitor và duyệt AST
     visitor = JavaASTGraphVisitor()
     visitor.visit(ast_tree)
     # print(ast_tree)
-    print(visitor.variable_map)
-    print(visitor.type_map)
-    print(visitor.method_map)
+    logging.info(visitor.variable_map)
+    logging.info(visitor.type_map)
+    # print(visitor.method_map)
     # In ra danh sách các cạnh dưới dạng tuple: (parent, edge_label, child)
     for edge in visitor.edges:
-        print(edge)
+        logging.info(edge)
     
     # Ví dụ in ra các node với subindex
     # print("\nCác node đã duyệt:")
