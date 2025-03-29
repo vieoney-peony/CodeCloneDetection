@@ -169,9 +169,12 @@ class GraphCreator(nn.Module):
         order0_tensor = torch.tensor(order0_list, device=device)
         order2_tensor = torch.tensor(order2_list, device=device)
 
-        order0_emb = sin_cos_encoding(order0_tensor, self.embedding_dim)
-        order2_emb = sin_cos_encoding(order2_tensor, self.embedding_dim)
+        # order0_emb = sin_cos_encoding(order0_tensor, self.embedding_dim)
+        # order2_emb = sin_cos_encoding(order2_tensor, self.embedding_dim)
 
+        order0_emb = torch.zeros((len(order0_list), self.embedding_dim), device=device)
+        order2_emb = torch.zeros((len(order2_list), self.embedding_dim), device=device)
+        
         edge_tensor = torch.tensor([int(o[1]) for o in orders], device=device)
 
         edge_emb = self.edge_embedding(edge_tensor)
