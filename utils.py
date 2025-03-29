@@ -25,7 +25,8 @@ def import_object(path):
 
 
 # Get the optimizer, scheduler, and scaler
-def create_optimizer_scheduler_scaler(config_yaml, model, graph_creator):
+def create_optimizer_scheduler_scaler(config_yaml, model, graph_creator, 
+                                      iter_per_epoch=None, total_iter=None):
     # Tạo optimizer, scheduler, và scaler từ cấu hình
     training_config = config_yaml["train"]
     # Optimizer
@@ -39,7 +40,15 @@ def create_optimizer_scheduler_scaler(config_yaml, model, graph_creator):
     if "scheduler" in training_config:  # Check if scheduler is in config
         scheduler_class = import_object(training_config["scheduler"]["type"])
         scheduler_params = training_config["scheduler"]["params"]
-        scheduler = scheduler_class(optimizer, **scheduler_params)
+
+        if scheduler_class.__name__ == "get_linear_schedule_with_warmup":
+            if iter_per_epoch is None or total_iter is None:
+                raise ValueError("total_iter must be provided for linear_schedule")
+            scheduler_params["num_warmup_steps"] = iter_per_epoch
+            scheduler_params["num_training_steps"] = total_iter
+            scheduler = scheduler_class(optimizer, **scheduler_params)
+        else:
+            scheduler = scheduler_class(optimizer, **scheduler_params)
 
     # AMP (Automatic Mixed Precision)
     use_amp = training_config.get("amp", False)  # Default to False if not specified

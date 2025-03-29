@@ -44,8 +44,15 @@ def init(config):
     val_loader = DataLoader(val_txt, batch_size=config["dataset"]["batch_size"], shuffle=False)
 
     pos_neg_sampler = PosNegSampler(train_txt)
+    
+    iter_per_epoch = len(train_loader)
+    if config["train"]["max_iter"] is not None:
+        iter_per_epoch = min(len(train_loader), config["train"]["max_iter"])
+    total_iter = config["train"]["epochs"] * iter_per_epoch
 
-    optimizer, scheduler, scaler = create_optimizer_scheduler_scaler(config, model, graph_creator)
+    optimizer, scheduler, scaler = create_optimizer_scheduler_scaler(config, model, graph_creator,
+                                                                     iter_per_epoch=iter_per_epoch,
+                                                                     total_iter=total_iter)
 
     # Mặc định train từ epoch 0
     start_epoch = 0
@@ -144,10 +151,14 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
                                        max_norm=1.0)
         scaler.step(optimizer)
         scaler.update()
+        if scheduler is not None and isinstance(scheduler, torch.optim.lr_scheduler.LambdaLR):
+            scheduler.step()
+            # print(f"Scheduler step: {scheduler.get_last_lr()}")
 
         pbar.set_postfix({"Train loss": f"{total_loss:.6f}"})
 
-    if scheduler is not None:
+    if scheduler is not None and \
+        not isinstance(scheduler, torch.optim.lr_scheduler.LambdaLR):
         scheduler.step()
 
     return total_loss

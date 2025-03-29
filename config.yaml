@@ -45,11 +45,10 @@ train:
   #     momentum: 0.9
   #     weight_decay: 0.0005
 
-  # scheduler:
-  #   type: torch.optim.lr_scheduler.CosineAnnealingLR
-  #   params:
-  #     T_max: *epochs
-  #     eta_min: 0.00001
-
+  scheduler:
+    type: transformers.get_linear_schedule_with_warmup
+    params:
+      num_warmup_steps: 
+      num_training_steps: 
   amp: true
 
