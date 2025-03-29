@@ -100,7 +100,7 @@ class ASTValueEmbedding(nn.Module):
             inputs = self.tokenizer(batch, return_tensors="pt", 
                                     padding=True, 
                                     truncation=True, 
-                                    max_length=512).to(device)
+                                    max_length=512).to(device) 
             outputs = self.codebert(**inputs)
             batch_embedding = self.proj(outputs.last_hidden_state.mean(dim=1))
             embeddings.append(batch_embedding)

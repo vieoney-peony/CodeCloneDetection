@@ -17,6 +17,9 @@ class JavaASTLiteralNode(JavaASTNode):
         super().__init__(node, sub_index)
         self.value = value
 
+    def __str__(self):
+        return f"{self.label}_{self.sub_index}_{self.value}"
+
 class JavaASTBinaryOpNode(JavaASTNode):
     def __init__(self, node: javalang.tree.BinaryOperation, sub_index: int = 0):
         super().__init__(node, sub_index)
@@ -280,14 +283,30 @@ class JavaASTGraphVisitor:
 
         if invoke_name in self.variable_map:
             invoke_obj = self.variable_map[invoke_name][0]
+            self.variable_map[invoke_name].append(current_obj)
         elif invoke_name in self.type_map:
             invoke_obj = self.type_map[invoke_name][0]
+            self.type_map[invoke_name].append(current_obj)
 
         if invoke_obj:
             self.edges.append((invoke_obj, "MethodInvoke", current_obj))
         elif invoke_name:
             current_obj.__class__ = JavaASTLiteralNode
             current_obj.value = invoke_name + '.' + member_name
+
+        self.generic_visit(node)
+    
+    def visit_CatchClauseParameter(self, node):
+        """Xử lý tham số của khối catch"""
+        var_name = node.name
+        current_obj = self.node_mapping.get(id(node))
+        current_obj.__class__ = JavaASTLiteralNode
+        self.variable_map[var_name] = [current_obj]
+        for i, type in enumerate(node.types):
+            if i == 0:
+                current_obj.value = str(type)
+            else:
+                current_obj.value = current_obj.value + ' | ' + str(type)
 
         self.generic_visit(node)
 
@@ -372,10 +391,12 @@ if __name__ == "__main__":
     visitor = JavaASTGraphVisitor()
     visitor.visit(ast_tree)
     # print(ast_tree)
-    # print(visitor.variable_map)
+    print(visitor.variable_map)
+    print(visitor.type_map)
+    print(visitor.method_map)
     # In ra danh sách các cạnh dưới dạng tuple: (parent, edge_label, child)
-    # for edge in visitor.edges:
-    #     print(edge)
+    for edge in visitor.edges:
+        print(edge)
     
     # Ví dụ in ra các node với subindex
     # print("\nCác node đã duyệt:")
