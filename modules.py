@@ -11,7 +11,7 @@ import json
 
 from datasets import load_from_disk
 from order_flow_ast import JavaASTGraphVisitor, JavaASTLiteralNode, JavaASTBinaryOpNode
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModel, PreTrainedTokenizerFast
 
 from torch_geometric.data import HeteroData, Batch
 from torch_geometric.nn import HeteroConv, MessagePassing, GlobalAttention, GENConv
@@ -65,54 +65,57 @@ def check_node_embedding(order, node_edge_embedding):
  
 
 class ASTValueEmbedding(nn.Module):
-    def __init__(self, pretrained="haisongzhang/roberta-tiny-cased", cache_dir="./codebert_cache", 
-                 embedding_dim=128, batch_size=128, num_layers_to_keep=1, freeze_encoder=False):
+    def __init__(self, tokenizer_path="java_tokenizer.json", embedding_dim=128, freeze_encoder=False):
         super(ASTValueEmbedding, self).__init__()
-        
-        # Load tokenizer & model
-        self.tokenizer = AutoTokenizer.from_pretrained(pretrained, cache_dir=cache_dir)
-        self.codebert = AutoModel.from_pretrained(pretrained, cache_dir=cache_dir)
-        
-        # Lấy số chiều hidden của mô hình RoBERTa hiện tại
-        hidden_dim = self.codebert.config.hidden_size  # Tự động lấy giá trị 768, 384 hoặc 256
-        # print(f"Hidden dimension: {hidden_dim}")
-        # Giữ lại số layers mong muốn
-        if num_layers_to_keep < len(self.codebert.encoder.layer):
-            self.codebert.encoder.layer = self.codebert.encoder.layer[:num_layers_to_keep]
 
-        # Freeze encoder nếu cần
-        if freeze_encoder:
-            for param in self.codebert.parameters():
-                param.requires_grad = False
+        # Load tokenizer đã train
+        self.tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer_path)
+        self.tokenizer.add_special_tokens({
+            "unk_token": "<unk>",
+            "pad_token": "<pad>",
+            "cls_token": "<s>",
+            "sep_token": "</s>",
+            "mask_token": "<mask>",
+            "bos_token": "<s>",
+            "eos_token": "</s>",
+        })
+        # Lấy vocab size từ tokenizer
+        vocab_size = self.tokenizer.vocab_size
+        print(f"Loaded vocab size: {vocab_size}")
 
-        # Projection layer để giảm dimension
-        self.proj = nn.Linear(hidden_dim, embedding_dim)
-
-        # Batch size
-        self.batch_size = batch_size
+        # Tạo nn.Embedding từ vocab
+        self.embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=embedding_dim)
+        self.proj = nn.Linear(embedding_dim, embedding_dim, bias=False)
 
     def forward(self, sentences):
         device = next(self.parameters()).device
-        embeddings = []
 
-        # Chia nhỏ sentences thành batch nhỏ để tránh OOM
-        for batch in self.chunk_list(sentences, self.batch_size):
-            inputs = self.tokenizer(batch, return_tensors="pt", 
-                                    padding=True, 
-                                    truncation=True, 
-                                    max_length=512).to(device) 
-            outputs = self.codebert(**inputs)
-            batch_embedding = self.proj(outputs.last_hidden_state.mean(dim=1))
-            embeddings.append(batch_embedding)
-        
-        return torch.cat(embeddings, dim=0) if embeddings else None
+        # Tokenize sentences -> chuyển thành token ID
+        encoded_inputs = self.tokenizer(sentences, 
+                                        return_tensors="pt", 
+                                        padding=True, 
+                                        truncation=True, 
+                                        max_length=512)
 
-    @staticmethod
-    def chunk_list(lst, chunk_size):
-        """Chia list thành các phần nhỏ có kích thước chunk_size."""
-        for i in range(0, len(lst), chunk_size):
-            yield lst[i:i + chunk_size]
+        input_ids = encoded_inputs["input_ids"].to(device)  # (batch_size, seq_len)
+        attention_mask = encoded_inputs["attention_mask"].to(device)  # (batch_size, seq_len)
 
+        # Lookup embedding
+        token_embeddings = self.embedding(input_ids)  # (batch_size, seq_len, embedding_dim)
+
+        # Tính tổng embedding nhưng bỏ qua padding bằng cách nhân với attention_mask
+        masked_embeddings = token_embeddings * attention_mask.unsqueeze(-1)  # (batch_size, seq_len, embedding_dim)
+
+        # Tính tổng các embedding của token thực tế
+        sum_embeddings = masked_embeddings.sum(dim=1)  # (batch_size, embedding_dim)
+
+        # Đếm số token thực tế (không tính padding)
+        valid_tokens = attention_mask.sum(dim=1, keepdim=True)  # (batch_size, 1)
+
+        # Mean-pooling bỏ qua padding (tránh chia 0 bằng cách clamp)
+        sentence_embeddings = sum_embeddings / valid_tokens.clamp(min=1e-9)  # (batch_size, embedding_dim)
+
+        return sentence_embeddings
 
 class GraphCreator(nn.Module):
     def __init__(self, node_dict: dict, edge_dict: dict, embedding_dim=128):
