@@ -5,6 +5,7 @@ from tqdm import tqdm
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+from torch.amp import autocast
 
 from config import Config
 from modules import build_model, inference
@@ -42,16 +43,17 @@ def eval(model, graph_creator, jsonl_dataset,
         if max_iter is not None and i >= max_iter:
             break
         with torch.no_grad():
-            code_batch_source, code_batch_target, labels = prepare_batch(batch, idx_map, jsonl_dataset, device)
-            logit = inference(graph_creator, model, code_batch_source, code_batch_target)
-            
-            # loss = cosine_similarity_loss(logit, labels)
-            loss = ce(logit, labels.long())
+            with autocast(device_type=device.type):
+                code_batch_source, code_batch_target, labels = prepare_batch(batch, idx_map, jsonl_dataset, device)
+                logit = inference(graph_creator, model, code_batch_source, code_batch_target)
+                
+                # loss = cosine_similarity_loss(logit, labels)
+                loss = ce(logit, labels.long())
 
-            total_loss = (total_loss*i + loss.item()) / (i+1)
+                total_loss = (total_loss*i + loss.item()) / (i+1)
 
-            logits.append(logit.sigmoid().cpu().numpy())
-            y_trues.append(labels.cpu().numpy())
+                logits.append(logit.sigmoid().cpu().numpy())
+                y_trues.append(labels.cpu().numpy())
     
     logits=np.concatenate(logits,0)
     y_trues=np.concatenate(y_trues,0)       
