@@ -111,6 +111,27 @@ def prepare_batch(batch, idx_map, jsonl_dataset, device):
 
     return code_batch_source, code_batch_target, labels
 
+def prepare_batchv2(batch, graph_dataset, device):
+    # Chuẩn bị dữ liệu cho một batch
+    batch_indices_1 = batch['idx1']
+    batch_indices_2 = batch['idx2']
+    labels = batch['label'] 
+
+    if isinstance(batch_indices_1, torch.Tensor):
+        batch_indices_1 = batch_indices_1.tolist()
+    if isinstance(batch_indices_2, torch.Tensor):
+        batch_indices_2 = batch_indices_2.tolist()
+
+    graph_source = graph_dataset.collate_fn([graph_dataset[idx] for idx in batch_indices_1]).to(device)
+    graph_target = graph_dataset.collate_fn([graph_dataset[idx] for idx in batch_indices_2]).to(device)
+
+    if isinstance(labels, list):
+        labels = torch.tensor(labels, dtype=torch.float).to(device)
+    else:
+        labels = labels.to(device, dtype=torch.float)
+
+    return graph_source, graph_target, labels
+
 def save_loss_plot(train_losses, val_losses, file_path):
     plt.figure(figsize=(10, 5))
     plt.plot(

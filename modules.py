@@ -1,8 +1,6 @@
 import os
-from typing import Tuple, Union
 
 import torch
-from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -10,14 +8,11 @@ import math
 import json
 
 from datasets import load_from_disk
-from order_flow_ast import JavaASTGraphVisitor, JavaASTLiteralNode, JavaASTBinaryOpNode
-from transformers import AutoTokenizer, AutoModel, PreTrainedTokenizerFast
+from dataset import build_dataset
+from transformers import PreTrainedTokenizerFast
 
 from torch_geometric.data import HeteroData, Batch
-from torch_geometric.nn import HeteroConv, MessagePassing, GlobalAttention, GENConv
-from torch_geometric.nn.dense.linear import Linear
-from torch_geometric.typing import Adj, OptPairTensor, OptTensor, Size
-from torch_geometric.utils import spmm
+from torch_geometric.nn import GATConv, GlobalAttention, GENConv
 
 from utils import set_seed
 from config import Config
@@ -87,9 +82,17 @@ class ASTValueEmbedding(nn.Module):
         self.embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=embedding_dim)
         self.proj = nn.Linear(embedding_dim, embedding_dim, bias=False)
 
+    def infer_inputs(self, input_ids, attention_mask):
+        token_embeddings = self.proj(self.embedding(input_ids))  # (batch_size, seq_len, embedding_dim)
+        masked_embeddings = token_embeddings * attention_mask.unsqueeze(-1)  # (batch_size, seq_len, embedding_dim)
+        sum_embeddings = masked_embeddings.sum(dim=1)  # (batch_size, embedding_dim)
+        valid_tokens = attention_mask.sum(dim=1, keepdim=True)  # (batch_size, 1)
+        sentence_embeddings = sum_embeddings / valid_tokens.clamp(min=1e-9)  # (batch_size, embedding_dim)
+
+        return sentence_embeddings
+    
     def forward(self, sentences):
         device = next(self.parameters()).device
-
         # Tokenize sentences -> chuyển thành token ID
         encoded_inputs = self.tokenizer(sentences, 
                                         return_tensors="pt", 
@@ -99,21 +102,7 @@ class ASTValueEmbedding(nn.Module):
 
         input_ids = encoded_inputs["input_ids"].to(device)  # (batch_size, seq_len)
         attention_mask = encoded_inputs["attention_mask"].to(device)  # (batch_size, seq_len)
-
-        # Lookup embedding
-        token_embeddings = self.proj(self.embedding(input_ids))  # (batch_size, seq_len, embedding_dim)
-
-        # Tính tổng embedding nhưng bỏ qua padding bằng cách nhân với attention_mask
-        masked_embeddings = token_embeddings * attention_mask.unsqueeze(-1)  # (batch_size, seq_len, embedding_dim)
-
-        # Tính tổng các embedding của token thực tế
-        sum_embeddings = masked_embeddings.sum(dim=1)  # (batch_size, embedding_dim)
-
-        # Đếm số token thực tế (không tính padding)
-        valid_tokens = attention_mask.sum(dim=1, keepdim=True)  # (batch_size, 1)
-
-        # Mean-pooling bỏ qua padding (tránh chia 0 bằng cách clamp)
-        sentence_embeddings = sum_embeddings / valid_tokens.clamp(min=1e-9)  # (batch_size, embedding_dim)
+        sentence_embeddings = self.infer_inputs(input_ids, attention_mask)  # (batch_size, embedding_dim)
 
         return sentence_embeddings
 
@@ -297,33 +286,129 @@ class GCM(nn.Module):
                             "batch": batch_size_target}
             
             x_source, x_target = self.cross_graph_attention(source_output, target_output, self.cross_attns[i])
-            # print(source_batch["node"].x)
-
-        # match_scores = []
-        # unique_batches = torch.unique(source_batch["node"].batch)
-        # for batch_idx in unique_batches:
-        #     src_mask = source_batch["node"].batch == batch_idx
-        #     tgt_mask = target_batch["node"].batch == batch_idx
-
-            # src_nodes = source_batch["node"].x[src_mask].mean(dim=0)
-            # tgt_nodes = target_batch["node"].x[tgt_mask].mean(dim=0)
-
-            # Tính toán dot product giữa các node embeddings
-            # match_score = torch.cosine_similarity(src_nodes, tgt_nodes, dim=-1).to(dtype=src_nodes.dtype)
-            # match_score = torch.dot(src_nodes, tgt_nodes)
-            # match_scores.append(match_score)
 
         pooled_source = self.pool(x_source, batch_size_source)
         pooled_target = self.pool(x_target, batch_size_target)
-        # print(pooled_source)
-        # pooled_source = F.normalize(pooled_source, p=2, dim=-1)
-        # pooled_target = F.normalize(pooled_target, p=2, dim=-1)
-
-        # out = torch.cosine_similarity(pooled_source, pooled_target, dim=-1)
-        # return torch.stack(match_scores) 
         out = torch.softmax(self.cls_head(torch.cat([pooled_source, pooled_target], dim=-1)), dim=-1)
 
         return out
+
+
+class GraphCreatorv2(nn.Module):
+    def __init__(self, node_dict: dict, edge_dict: dict, embedding_dim=128, tokenizer_path="java_tokenizer.json"):
+        super(GraphCreatorv2, self).__init__()
+        self.node_dict = node_dict
+        self.embedding_dim = embedding_dim
+        self.num_nodes = len(node_dict)
+        self.num_edge = len(edge_dict)
+        self.node_embedding = nn.Embedding(self.num_nodes, embedding_dim)
+        self.edge_embedding = nn.Embedding(self.num_edge, embedding_dim)
+        self.ast_value_emb = ASTValueEmbedding(embedding_dim=embedding_dim,
+                                            tokenizer_path=tokenizer_path)
+    
+    def forward(self, batch):
+        device = next(self.parameters()).device
+        batch = batch.to(device)
+
+        sentence_embeddings = self.ast_value_emb.infer_inputs(batch["node"].input_ids, 
+                                                              batch["node"].attention_mask)  
+        original_node_emb = self.node_embedding(batch["node"].original_id)  
+        batch["node"].x = sentence_embeddings + original_node_emb  # (batch_size, embed_dim)
+
+        edge_emb = self.edge_embedding(batch["node", "edge", "node"].edge_type_id)
+        batch["node", "edge", "node"].edge_attr = edge_emb  # (num_edges, embed_dim)
+
+        return batch
+
+
+class GCMv2(nn.Module):
+    def __init__(self, in_dim=128, hidden_dim=128, num_layers=4, num_heads=4):
+        super().__init__()
+        self.num_layers = num_layers
+        self.num_heads = num_heads
+        self.gnn_layers = nn.ModuleList([
+        GATConv(in_dim if i == 0 else hidden_dim, 
+                            hidden_dim, )
+            for i in range(num_layers)
+        ])
+        
+        self.cross_attns = nn.ModuleList([
+            nn.Sequential(
+                nn.MultiheadAttention(hidden_dim, num_heads, batch_first=False),
+                nn.LayerNorm(hidden_dim)  # LayerNorm nên đặt ngoài, không trong danh sách []
+            ) for _ in range(num_layers)
+        ])
+
+        self.mlp_gate = nn.Sequential(nn.Linear(hidden_dim,1),nn.Sigmoid())
+        self.pool = GlobalAttention(gate_nn=self.mlp_gate) 
+        self.cls_head = nn.Linear(hidden_dim*2, 2) 
+    
+    def cross_graph_attention(self, source_output, target_output, cross_attn):
+        source_x, target_x = source_output['x'], target_output['x']
+        source_batches, target_batches = source_output['batch'], target_output['batch']
+
+        attn_layer, norm_layer = cross_attn  
+
+        # Tạo binary mask (src_len, tgt_len), 1 = chặn, 0 = cho phép
+        attn_mask = source_batches.view(-1, 1) != target_batches.view(1, -1)  # (src_len, tgt_len)
+        attn_mask = attn_mask.to(dtype=torch.bool, device=source_x.device)  # Định dạng chuẩn
+
+        # Thực hiện attention trên toàn bộ graph
+        attn_output, _ = attn_layer(source_x.unsqueeze(1), target_x.unsqueeze(1), target_x.unsqueeze(1), attn_mask=attn_mask)
+        attn_output_t, _ = attn_layer(target_x.unsqueeze(1), source_x.unsqueeze(1), source_x.unsqueeze(1), attn_mask=attn_mask.T)
+
+        # Chuẩn hóa output
+        source_x = norm_layer(attn_output.squeeze(1))
+        target_x = norm_layer(attn_output_t.squeeze(1))
+
+        return source_x, target_x
+
+    def forward(self, source_batch: Batch, target_batch: Batch):
+        """
+        source_batch, target_batch: Batch của HeteroData chứa nhiều đồ thị
+        """
+        x_source = source_batch["node"].x
+        edges_index_source = source_batch["node", "edge", "node"].edge_index
+        edges_attr_source = source_batch["node", "edge", "node"].edge_attr
+        batch_size_source = source_batch["node"].batch
+
+        x_target = target_batch["node"].x
+        edges_index_target = target_batch["node", "edge", "node"].edge_index
+        edges_attr_target = target_batch["node", "edge", "node"].edge_attr
+        batch_size_target = target_batch["node"].batch
+
+        for i in range(self.num_layers):
+            x_source = self.gnn_layers[i](
+                x=x_source,
+                edge_index=edges_index_source,
+                edge_attr=edges_attr_source
+            )
+
+            x_target = self.gnn_layers[i](
+                x=x_target,
+                edge_index=edges_index_target,
+                edge_attr=edges_attr_target
+            )
+
+            source_output = {"x": x_source, 
+                            "edge_index": edges_index_source, 
+                            "edge_attr": edges_attr_source, 
+                            "batch": batch_size_source}
+            target_output = {"x": x_target,
+                            "edge_index": edges_index_target, 
+                            "edge_attr": edges_attr_target, 
+                            "batch": batch_size_target}
+            
+            x_source, x_target = self.cross_graph_attention(source_output, target_output, self.cross_attns[i])
+
+        pooled_source = self.pool(x_source, batch_size_source)
+        pooled_target = self.pool(x_target, batch_size_target)
+
+        # out = torch.cosine_similarity(pooled_source, pooled_target, dim=-1) # (batch_size, 1)
+        out = torch.softmax(self.cls_head(torch.cat([pooled_source, pooled_target], dim=-1)), dim=-1)
+
+        return out
+
 
 def build_model(config):
     with open(config['node_dict'], "r") as f:
@@ -342,6 +427,24 @@ def build_model(config):
     
     return graph_creator, model
 
+def build_modelv2(config):
+    with open(config['node_dict'], "r") as f:
+        node_dict = json.load(f)
+    with open(config['edge_dict'], "r") as f:
+        edges_dict = json.load(f)
+
+    model_config = config['model']
+    graph_creator = GraphCreatorv2(node_dict=node_dict, 
+                                 edge_dict=edges_dict, 
+                                 embedding_dim=model_config['embedding_dim'],
+                                 tokenizer_path=config['tokenizer_path'])
+    
+    model = GCMv2(in_dim=model_config['embedding_dim'], 
+                hidden_dim=model_config['hidden_dim'], 
+                num_layers=model_config['num_layers']) 
+    
+    return graph_creator, model
+
 def inference(graph_creator: GraphCreator, model: GCM, code_batch_source, code_batch_target):
     graph_source = graph_creator(code_batch_source["edges"], 
                                 code_batch_source["orders"], 
@@ -354,23 +457,30 @@ def inference(graph_creator: GraphCreator, model: GCM, code_batch_source, code_b
     scores = model(graph_source, graph_target)
     return scores
 
+def inferencev2(graph_creator: GraphCreatorv2, model: GCMv2, graph_source, graph_target):
+    graph_source = graph_creator(graph_source)
+            
+    graph_target = graph_creator(graph_target)
+    
+    scores = model(graph_source, graph_target)
+    return scores
+
 if __name__ == '__main__':
     config = Config("config.yaml")
-    jsonl_dataset = load_from_disk('Processed_BCB_code')
-    graph_creator, model = build_model(config)
+    jsonl_dataset, txt_dataset, graph_dataset = build_dataset(config)
+    graph_creator, model = build_modelv2(config)
     mean_num_node = 0
-    for i, batch in enumerate(jsonl_dataset.iter(batch_size=2)):
+
+    for i, batch in enumerate(txt_dataset['train'].iter(batch_size=2)):
         torch.cuda.empty_cache()
-        edges = batch["edges"]
-        orders = batch["orders"]
-        values = batch["values"]
-        
-        graph_list = graph_creator(edges, orders, values)
-        graph_list2 = graph_creator(edges, orders, values)
-        result = model(graph_list, graph_list2)
-        print(i, result)
-        # mean_num_node = (mean_num_node*i + graph_list["node"].num_nodes) / (i+1)
-        # print(mean_num_node)
+        idx1 = batch['idx1']
+        idx2 = batch['idx2']
+        graph_source = graph_dataset.collate_fn([graph_dataset[idx1[0]]])
+        graph_target = graph_dataset.collate_fn([graph_dataset[idx1[0]]])
+
+        scores = inferencev2(graph_creator, model, graph_source, graph_target)
+        print("Scores:", scores)
+        break
     
     # print(f"Mean number of nodes: {mean_num_node}")
         

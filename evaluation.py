@@ -8,11 +8,11 @@ from torch.utils.data import DataLoader
 from torch.amp import autocast
 
 from config import Config
-from modules import build_model, inference
+from modules import build_modelv2, inferencev2
 from dataset import build_dataset
 from loss import bce, cosine_similarity_loss, ce
 from metrics import calculate_metrics
-from utils import set_seed, load_checkpoint, prepare_batch
+from utils import set_seed, load_checkpoint, prepare_batch, prepare_batchv2
 
 set_seed(0)
 
@@ -20,8 +20,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def eval(model, graph_creator, jsonl_dataset, 
-            idx_map, val_loader, batch_size, 
-            device, max_iter=None):
+        graph_dataset, idx_map, val_loader, batch_size, 
+        device, max_iter=None):
     model.eval()
     graph_creator.eval()
     total_loss = 0
@@ -44,8 +44,8 @@ def eval(model, graph_creator, jsonl_dataset,
             break
         with torch.no_grad():
             with autocast(device_type=device.type):
-                code_batch_source, code_batch_target, labels = prepare_batch(batch, idx_map, jsonl_dataset, device)
-                logit = inference(graph_creator, model, code_batch_source, code_batch_target)
+                code_batch_source, code_batch_target, labels = prepare_batchv2(batch, graph_dataset, device)
+                logit = inferencev2(graph_creator, model, code_batch_source, code_batch_target)
                 
                 # loss = cosine_similarity_loss(logit, labels)
                 loss = ce(logit, labels.long())
@@ -70,21 +70,22 @@ def eval(model, graph_creator, jsonl_dataset,
 def main(args):
     config = Config(args.config)
 
-    graph_creator, model = build_model(config)
+    graph_creator, model = build_modelv2(config)
     model = model.to(device)
     graph_creator = graph_creator.to(device)
 
     if args.checkpoint is not None:
         load_checkpoint(args.checkpoint, model, graph_creator, None, None, None)
 
-    jsonl_dataset, txt_dataset = build_dataset(config)
+    jsonl_dataset, txt_dataset, graph_dataset = build_dataset(config)
 
     idx_map = {v: i for i, v in enumerate(jsonl_dataset['idx'])}
     
     test_txt = txt_dataset[args.split]
     test_loader = DataLoader(test_txt, batch_size=config["dataset"]["batch_size"], shuffle=False)
 
-    eval(model, graph_creator, jsonl_dataset, idx_map, test_loader, None, device)
+    eval(model, graph_creator, jsonl_dataset, graph_dataset,
+        idx_map, test_loader, None, device)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

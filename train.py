@@ -11,12 +11,13 @@ from torch.amp import autocast
 
 from config import Config
 from dataset import build_dataset, PosNegSampler
-from modules import build_model, inference
+from modules import build_model, inference, build_modelv2, inferencev2
 from loss import bce, cosine_similarity_loss, ce
 from evaluation import eval
 
 from utils import set_seed, create_optimizer_scheduler_scaler, \
-                    save_checkpoint, load_checkpoint, prepare_batch, save_loss_plot
+                    save_checkpoint, load_checkpoint, prepare_batchv2,\
+                    prepare_batch, save_loss_plot
 
 set_seed(0)
 
@@ -28,8 +29,8 @@ __current_time__ = datetime.datetime.now(vietnam_tz).strftime("%Y-%m-%d_%H-%M-%S
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def init(config):
-    graph_creator, model = build_model(config)
-    jsonl_dataset, txt_dataset = build_dataset(config)
+    graph_creator, model = build_modelv2(config)
+    jsonl_dataset, txt_dataset, graph_dataset = build_dataset(config)
 
     idx_map = {v: i for i, v in enumerate(jsonl_dataset['idx'])}
 
@@ -37,7 +38,7 @@ def init(config):
     val_txt = txt_dataset['valid']
 
     # Chọn ngẫu nhiên 5% dữ liệu từ tập validation để kiểm tra
-    random_indices = random.sample(range(len(val_txt)), int(len(val_txt)*0.05))
+    random_indices = random.sample(range(len(val_txt)), int(len(val_txt)*0.1))
     val_txt = val_txt.select(random_indices)
 
     train_loader = DataLoader(train_txt, batch_size=config["dataset"]["batch_size"], shuffle=True)
@@ -83,14 +84,14 @@ def init(config):
     os.makedirs(config["log_dir"], exist_ok=True)
     writer = SummaryWriter(log_dir=os.path.join(config["log_dir"], f"train_{__current_time__}"))
 
-    return model, graph_creator, jsonl_dataset, \
+    return model, graph_creator, jsonl_dataset, graph_dataset, \
             idx_map, train_loader, val_loader, pos_neg_sampler, \
             optimizer, scheduler, scaler, \
             start_epoch, end_epoch, writer
 
 
 def train_one_epoch(model, graph_creator, jsonl_dataset, 
-                    idx_map, train_loader, pos_neg_sampler, batch_size,
+                    graph_dataset, idx_map, train_loader, pos_neg_sampler, batch_size,
                     optimizer, scheduler, scaler, max_iter=None):
     model.train()
     graph_creator.train()
@@ -117,9 +118,7 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
         torch.cuda.empty_cache()
         optimizer.zero_grad()
         
-        # pos_batch, neg_batch = pos_neg_sampler.sample(batch_size)
-        # get default samples
-        code_batch_source, code_batch_target, labels = prepare_batch(batch, idx_map, jsonl_dataset, device)
+        graph_source, graph_target, labels = prepare_batchv2(batch, graph_dataset, device)
         
         # get positive and negative samples
         # pos_code_batch_source, pos_code_batch_target, pos_labels = prepare_batch(pos_batch, idx_map, jsonl_dataset, device)
@@ -127,7 +126,7 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
         # pos_neg_labels = torch.cat([pos_labels, neg_labels], dim=0)
 
         with autocast(device_type=device.type, enabled=scaler is not None):
-            logit = inference(graph_creator, model, code_batch_source, code_batch_target)
+            logit = inferencev2(graph_creator, model, graph_source, graph_target)
 
             # pos_logit = inference(graph_creator, model, pos_code_batch_source, pos_code_batch_target)
             # neg_logit = inference(graph_creator, model, neg_code_batch_source, neg_code_batch_target)
@@ -168,7 +167,7 @@ def train_one_epoch(model, graph_creator, jsonl_dataset,
 def train(arg):
     config = Config(arg.config)
 
-    model, graph_creator, jsonl_dataset, \
+    model, graph_creator, jsonl_dataset, graph_dataset, \
     idx_map, train_loader, val_loader, pos_neg_sampler, \
     optimizer, scheduler, scaler, \
     start_epoch, end_epoch, writer = init(config)
@@ -187,11 +186,11 @@ def train(arg):
 
     for epoch in range(start_epoch, end_epoch):
         print(f"Epoch {epoch+1}/{end_epoch}")
-        t_loss = train_one_epoch(model, graph_creator, jsonl_dataset, 
+        t_loss = train_one_epoch(model, graph_creator, jsonl_dataset, graph_dataset,
                                  idx_map, train_loader, pos_neg_sampler, batch_size,
                                  optimizer, scheduler, scaler, max_iter)
 
-        result = eval(model, graph_creator, jsonl_dataset,
+        result = eval(model, graph_creator, jsonl_dataset, graph_dataset,
                        idx_map, val_loader, batch_size, device)
         
         # saving
