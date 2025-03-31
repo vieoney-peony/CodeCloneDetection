@@ -64,7 +64,7 @@ def check_node_embedding(order, node_edge_embedding):
  
 
 class ASTValueEmbedding(nn.Module):
-    def __init__(self, tokenizer_path="java_tokenizer.json", embedding_dim=128, max_length=1024):
+    def __init__(self, tokenizer_path="java_tokenizer.json", embedding_dim=128, max_length=512):
         super(ASTValueEmbedding, self).__init__()
 
         # Load tokenizer đã train

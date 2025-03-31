@@ -233,7 +233,7 @@ class GraphDataset(Dataset):
                                         padding=True, 
                                         truncation=True, 
                                         return_tensors="pt",
-                                        max_length=1024)
+                                        max_length=512)
         
         input_ids = encoded_inputs["input_ids"]
         attention_mask = encoded_inputs["attention_mask"]
