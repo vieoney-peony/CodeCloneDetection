@@ -22,18 +22,22 @@ set_seed(0)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def sin_cos_encoding(pos: torch.tensor, d_model):
-    if pos.dim() == 1:  # Nếu pos là tensor 1D [num_positions]
-        pos = pos.unsqueeze(1)  # Chuyển thành [num_positions, 1]
+def positional_encoding(max_len, d_model):
+    """
+    Tạo positional encoding.
 
-    num_positions = pos.shape[0]  # Số lượng vị trí
-    pe = torch.zeros(num_positions, d_model, device=pos.device)  # Tensor output
-    
-    div_term = torch.exp(torch.arange(0, d_model, 2, device=pos.device) * (-math.log(10000.0) / d_model))
+    Args:
+        max_len: Độ dài tối đa của chuỗi.
+        d_model: Kích thước của embedding.
 
-    # Áp dụng sin/cos, mở rộng `pos` để broadcast với `div_term`
-    pe[:, 0::2] = torch.sin(pos * div_term)  # Sin encoding
-    pe[:, 1::2] = torch.cos(pos * div_term)  # Cos encoding
+    Returns:
+        Một tensor positional encoding có kích thước (max_len, d_model).
+    """
+    pe = torch.zeros(max_len, d_model)
+    position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+    div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+    pe[:, 0::2] = torch.sin(position * div_term)
+    pe[:, 1::2] = torch.cos(position * div_term)
     return pe
 
 def check_node_embedding(order, node_edge_embedding):
@@ -60,7 +64,7 @@ def check_node_embedding(order, node_edge_embedding):
  
 
 class ASTValueEmbedding(nn.Module):
-    def __init__(self, tokenizer_path="java_tokenizer.json", embedding_dim=128):
+    def __init__(self, tokenizer_path="java_tokenizer.json", embedding_dim=128, max_length=1024):
         super(ASTValueEmbedding, self).__init__()
 
         # Load tokenizer đã train
@@ -76,14 +80,21 @@ class ASTValueEmbedding(nn.Module):
         })
         # Lấy vocab size từ tokenizer
         vocab_size = self.tokenizer.vocab_size
-        print(f"Loaded vocab size: {vocab_size}")
-
+        # print(f"Loaded vocab size: {vocab_size}")
+        self.max_length = max_length
         # Tạo nn.Embedding từ vocab
         self.embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=embedding_dim)
         self.proj = nn.Linear(embedding_dim, embedding_dim, bias=False)
+        
+        self.pos_encoding = positional_encoding(self.max_length, embedding_dim).to(device)
+
+    def to(self, device):
+        self.pos_encoding = self.pos_encoding.to(device)
+        return super().to(device)
 
     def infer_inputs(self, input_ids, attention_mask):
         token_embeddings = self.proj(self.embedding(input_ids))  # (batch_size, seq_len, embedding_dim)
+        token_embeddings = token_embeddings + self.pos_encoding[:input_ids.size(1), :].unsqueeze(0)  # (batch_size, seq_len, embedding_dim)
         masked_embeddings = token_embeddings * attention_mask.unsqueeze(-1)  # (batch_size, seq_len, embedding_dim)
         sum_embeddings = masked_embeddings.sum(dim=1)  # (batch_size, embedding_dim)
         valid_tokens = attention_mask.sum(dim=1, keepdim=True)  # (batch_size, 1)
@@ -98,7 +109,7 @@ class ASTValueEmbedding(nn.Module):
                                         return_tensors="pt", 
                                         padding=True, 
                                         truncation=True, 
-                                        max_length=512)
+                                        max_length=self.max_length)
 
         input_ids = encoded_inputs["input_ids"].to(device)  # (batch_size, seq_len)
         attention_mask = encoded_inputs["attention_mask"].to(device)  # (batch_size, seq_len)
