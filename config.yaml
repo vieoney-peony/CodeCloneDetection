@@ -23,7 +23,7 @@ model:
   embedding_dim: 256
   hidden_dim: 256
 
-  num_layers: 4
+  num_layers: 8
   num_heads: 4
 
 log_dir: "runs"
@@ -35,7 +35,7 @@ train:
   optimizer:
     type: torch.optim.AdamW
     params:
-      lr: 0.00005  
+      lr: 0.00003  
       betas: [0.9, 0.999]  # Mặc định của AdamW
       weight_decay: 0.0005  # Giữ nguyên weight decay
 
