@@ -180,6 +180,15 @@ class JavaASTGraphVisitor:
             self.variable_map[var_name] = [current_obj] # list of JavaASTNode
         self.generic_visit(node)
         # self.variable_map[var_name].pop()
+    
+    def visit_ClassDeclaration(self, node):
+        current_obj = self.node_mapping.get(id(node))
+        current_obj.__class__ = JavaASTLiteralNode
+        modifiers = str(getattr(node, 'modifiers', None))
+        current_obj.value = modifiers
+        self.type_map[str(node.name)] = [current_obj]
+        self.generic_visit(node)
+
         
     def visit_MemberReference(self, node):
         var_name = node.member
@@ -233,6 +242,9 @@ class JavaASTGraphVisitor:
         var_name = node.name
         current_obj = self.node_mapping.get(id(node))
         self.variable_map[var_name] = [current_obj]
+        current_obj.__class__ = JavaASTLiteralNode
+        modifiers = str(getattr(node, 'modifiers', None))
+        current_obj.value = modifiers
         # print('FormalParameter:', var_name)
         self.generic_visit(node)
     
@@ -269,12 +281,24 @@ class JavaASTGraphVisitor:
     
     def visit_MethodDeclaration(self, node):
         current_obj = self.node_mapping.get(id(node))
-        # current_obj.__class__ = JavaASTLiteralNode
-        # current_obj.value = node.name
         self.variable_map[node.name] = [current_obj]
-        # print(node.name)
-        # print(node)
-        # print('##'*50)
+        current_obj.__class__ = JavaASTLiteralNode
+        modifiers = str(getattr(node, 'modifiers', None))
+        current_obj.value = modifiers
+        self.generic_visit(node)
+    
+    def visit_VariableDeclaration(self, node):
+        current_obj = self.node_mapping.get(id(node))
+        current_obj.__class__ = JavaASTLiteralNode
+        modifiers = str(getattr(node, 'modifiers', None))
+        current_obj.value = modifiers
+        self.generic_visit(node)
+    
+    def visit_LocalVariableDeclaration(self, node):
+        current_obj = self.node_mapping.get(id(node))
+        current_obj.__class__ = JavaASTLiteralNode
+        modifiers = str(getattr(node, 'modifiers', None))
+        current_obj.value = modifiers
         self.generic_visit(node)
 
     def visit_MethodInvocation(self, node):
@@ -316,10 +340,12 @@ class JavaASTGraphVisitor:
         var_name = node.name
         current_obj = self.node_mapping.get(id(node))
         current_obj.__class__ = JavaASTLiteralNode
+        modifiers = str(getattr(node, 'modifiers', None))
+        current_obj.value = modifiers
         self.variable_map[var_name] = [current_obj]
         for i, type in enumerate(node.types):
             if i == 0:
-                current_obj.value = str(type)
+                current_obj.value = current_obj.value + '.' + str(type)
             else:
                 current_obj.value = current_obj.value + ' | ' + str(type)
 
@@ -403,7 +429,7 @@ if __name__ == "__main__":
     from datasets import load_from_disk
     jsonl_dataset = load_from_disk('Processed_BCB_code')
     # print(jsonl_dataset['func'][0])
-    ast_tree = javalang.parse.parse(jsonl_dataset['func'][0])
+    ast_tree = javalang.parse.parse(jsonl_dataset['func'][3732])
     print_ast(ast_tree)
     # Tạo visitor và duyệt AST
     visitor = JavaASTGraphVisitor()

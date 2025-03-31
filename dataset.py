@@ -233,7 +233,7 @@ class GraphDataset(Dataset):
                                         padding=True, 
                                         truncation=True, 
                                         return_tensors="pt",
-                                        max_length=512)
+                                        max_length=1024)
         
         input_ids = encoded_inputs["input_ids"]
         attention_mask = encoded_inputs["attention_mask"]
@@ -296,7 +296,9 @@ class GraphDataset(Dataset):
             values = row['values']
             self.graphs[index], seq_len = self.create_graph(edges, orders, values)
             max_seq_len = max(max_seq_len, seq_len)
-            print(f"Processing row {i+1}/{len(self.jsonl_dataset)}")
+            if seq_len == 1024:
+                break
+            print(f"Processing row {i+1}/{len(self.jsonl_dataset)} with seq_len {seq_len}.")
         
         print(f"Max sequence length: {max_seq_len}")
 
@@ -304,13 +306,13 @@ if __name__ == '__main__':
     config = Config('config.yaml')
     jsonl_dataset, txt_dataset, graph_dataset = build_dataset(config)
     
-    dataloader = torch.utils.data.DataLoader(
-        graph_dataset, 
-        batch_size=4, 
-        shuffle=False, 
-        collate_fn=graph_dataset.collate_fn
-    )
+    # dataloader = torch.utils.data.DataLoader(
+    #     graph_dataset, 
+    #     batch_size=4, 
+    #     shuffle=False, 
+    #     collate_fn=graph_dataset.collate_fn
+    # )
 
-    for batch in dataloader:
-        print(batch)
-        break
+    # for batch in dataloader:
+    #     print(batch)
+    #     break
