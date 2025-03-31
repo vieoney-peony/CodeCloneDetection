@@ -86,15 +86,16 @@ class ASTValueEmbedding(nn.Module):
         self.embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=embedding_dim)
         self.proj = nn.Linear(embedding_dim, embedding_dim, bias=False)
         
-        self.pos_encoding = positional_encoding(self.max_length, embedding_dim).to(device)
+        # self.pos_encoding = positional_encoding(self.max_length, embedding_dim).to(device)
 
     def to(self, device):
-        self.pos_encoding = self.pos_encoding.to(device)
+        # self.pos_encoding = self.pos_encoding.to(device)
         return super().to(device)
 
     def infer_inputs(self, input_ids, attention_mask):
         token_embeddings = self.proj(self.embedding(input_ids))  # (batch_size, seq_len, embedding_dim)
-        token_embeddings = token_embeddings + self.pos_encoding[:input_ids.size(1), :].unsqueeze(0)  # (batch_size, seq_len, embedding_dim)
+        # token_embeddings = token_embeddings + self.pos_encoding[:input_ids.size(1), :].unsqueeze(0)  # (batch_size, seq_len, embedding_dim)
+        token_embeddings = token_embeddings # (batch_size, seq_len, embedding_dim)
         masked_embeddings = token_embeddings * attention_mask.unsqueeze(-1)  # (batch_size, seq_len, embedding_dim)
         sum_embeddings = masked_embeddings.sum(dim=1)  # (batch_size, embedding_dim)
         valid_tokens = attention_mask.sum(dim=1, keepdim=True)  # (batch_size, 1)
