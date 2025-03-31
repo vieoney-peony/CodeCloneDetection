@@ -230,10 +230,13 @@ class JavaASTGraphVisitor:
     
     def visit_Literal(self, node):
         """Xử lý node là literal"""
+        qualifier = str(getattr(node, 'modifiers', ''))
         value = node.value
         current_obj = self.node_mapping.get(id(node))
         current_obj.__class__ = JavaASTLiteralNode
-        current_obj.value = value
+        if qualifier != '':
+            qualifier = qualifier + '.'
+        current_obj.value = qualifier + '.' +value
         parent_obj = self.parent_stack[-2]
         self.edges.append((parent_obj, "Value", current_obj))
         self.generic_visit(node)
@@ -370,18 +373,11 @@ def print_ast(node, indent=0, key="root"):
 # Ví dụ sử dụng:
 if __name__ == "__main__":
     code = """
-    public class Example {
-        public static void copy(File src, File dst) {
-            try (InputStream is = new BufferedInputStream(new FileInputStream(src), BUFFER_SIZE);
-                OutputStream os = new BufferedOutputStream(new FileOutputStream(dst), BUFFER_SIZE)) {
-                byte[] buffer = new byte[BUFFER_SIZE];
-                int len;
-                while ((len = is.read(buffer)) > 0) {
-                    os.write(buffer, 0, len);
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+    class Test {
+        public static void main(String[] args) {
+            int[] arr = {1, 2, 3};
+            int x = arr[0];
+            int y = arr[1 + 1]; // Truy cập mảng bằng biểu thức
         }
     }
     """
@@ -429,7 +425,8 @@ if __name__ == "__main__":
     from datasets import load_from_disk
     jsonl_dataset = load_from_disk('Processed_BCB_code')
     # print(jsonl_dataset['func'][0])
-    ast_tree = javalang.parse.parse(jsonl_dataset['func'][3732])
+    # ast_tree = javalang.parse.parse(jsonl_dataset['func'][300])
+    ast_tree = javalang.parse.parse(code)
     print_ast(ast_tree)
     # Tạo visitor và duyệt AST
     visitor = JavaASTGraphVisitor()
@@ -442,6 +439,7 @@ if __name__ == "__main__":
     for edge in visitor.edges:
         logging.info(edge)
     
+    logging.info(jsonl_dataset['func'][300])
     # Ví dụ in ra các node với subindex
     # print("\nCác node đã duyệt:")
     # for node in visitor.node_mapping.values():

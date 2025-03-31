@@ -1,0 +1,166 @@
+PyTorch version 2.5.1+cu121 available.
+TensorFlow version 2.17.0 available.
+root: CompilationUnit
+    package: None
+    types[0]: ClassDeclaration
+        modifiers: set()
+        documentation: None
+        name: Test
+        body[0]: MethodDeclaration
+            documentation: None
+            modifiers: {'static', 'public'}
+            type_parameters: None
+            return_type: None
+            name: main
+            parameters[0]: FormalParameter
+                modifiers: set()
+                type: ReferenceType
+                    name: String
+                    dimensions[0]: None
+                    arguments: None
+                    sub_type: None
+                name: args
+                varargs: False
+                _position: Position(line=3, column=33)
+            throws: None
+            body[0]: LocalVariableDeclaration
+                modifiers: set()
+                type: BasicType
+                    name: int
+                    dimensions[0]: None
+                declarators[0]: VariableDeclarator
+                    name: arr
+                    initializer: ArrayInitializer
+                        initializers[0]: Literal
+                            qualifier: None
+                            value: 1
+                            _position: Position(line=4, column=26)
+                        initializers[1]: Literal
+                            qualifier: None
+                            value: 2
+                            _position: Position(line=4, column=29)
+                        initializers[2]: Literal
+                            qualifier: None
+                            value: 3
+                            _position: Position(line=4, column=32)
+                _position: Position(line=4, column=13)
+            body[1]: LocalVariableDeclaration
+                modifiers: set()
+                type: BasicType
+                    name: int
+                declarators[0]: VariableDeclarator
+                    name: x
+                    initializer: MemberReference
+                        qualifier: 
+                        selectors[0]: ArraySelector
+                            index: Literal
+                                qualifier: None
+                                value: 0
+                                _position: Position(line=5, column=25)
+                            _position: Position(line=5, column=24)
+                        member: arr
+                        _position: Position(line=5, column=21)
+                _position: Position(line=5, column=13)
+            body[2]: LocalVariableDeclaration
+                modifiers: set()
+                type: BasicType
+                    name: int
+                declarators[0]: VariableDeclarator
+                    name: y
+                    initializer: MemberReference
+                        qualifier: 
+                        selectors[0]: ArraySelector
+                            index: BinaryOperation
+                                operator: +
+                                operandl: Literal
+                                    qualifier: None
+                                    value: 1
+                                    _position: Position(line=6, column=25)
+                                operandr: Literal
+                                    qualifier: None
+                                    value: 1
+                                    _position: Position(line=6, column=29)
+                            _position: Position(line=6, column=24)
+                        member: arr
+                        _position: Position(line=6, column=21)
+                _position: Position(line=6, column=13)
+            _position: Position(line=3, column=23)
+        type_parameters: None
+        extends: None
+        implements: None
+        _position: Position(line=2, column=5)
+{'main': [MethodDeclaration_2_{'static', 'public'}], 'args': [FormalParameter_3_set()], 'arr': [VariableDeclarator_7, MemberReference_15, MemberReference_21], 'x': [VariableDeclarator_14], 'y': [VariableDeclarator_20]}
+{'Test': [ClassDeclaration_1_set()]}
+(CompilationUnit_0, 'Child', ClassDeclaration_1_set())
+(ClassDeclaration_1_set(), 'Parent', CompilationUnit_0)
+(ClassDeclaration_1_set(), 'Child', MethodDeclaration_2_{'static', 'public'})
+(MethodDeclaration_2_{'static', 'public'}, 'Parent', ClassDeclaration_1_set())
+(MethodDeclaration_2_{'static', 'public'}, 'Child', FormalParameter_3_set())
+(FormalParameter_3_set(), 'Parent', MethodDeclaration_2_{'static', 'public'})
+(FormalParameter_3_set(), 'Child', ReferenceType_4_String)
+(ReferenceType_4_String, 'Parent', FormalParameter_3_set())
+(MethodDeclaration_2_{'static', 'public'}, 'Child', LocalVariableDeclaration_5_set())
+(LocalVariableDeclaration_5_set(), 'Parent', MethodDeclaration_2_{'static', 'public'})
+(LocalVariableDeclaration_5_set(), 'Child', BasicType_6_int)
+(BasicType_6_int, 'Parent', LocalVariableDeclaration_5_set())
+(LocalVariableDeclaration_5_set(), 'Child', VariableDeclarator_7)
+(VariableDeclarator_7, 'Parent', LocalVariableDeclaration_5_set())
+(VariableDeclarator_7, 'Child', ArrayInitializer_8)
+(ArrayInitializer_8, 'Parent', VariableDeclarator_7)
+(ArrayInitializer_8, 'Child', Literal_9_.1)
+(Literal_9_.1, 'Parent', ArrayInitializer_8)
+(ArrayInitializer_8, 'Value', Literal_9_.1)
+(ArrayInitializer_8, 'Child', Literal_10_.2)
+(Literal_10_.2, 'Parent', ArrayInitializer_8)
+(ArrayInitializer_8, 'Value', Literal_10_.2)
+(ArrayInitializer_8, 'Child', Literal_11_.3)
+(Literal_11_.3, 'Parent', ArrayInitializer_8)
+(ArrayInitializer_8, 'Value', Literal_11_.3)
+(Literal_9_.1, 'NextSib', Literal_10_.2)
+(Literal_10_.2, 'NextSib', Literal_11_.3)
+(MethodDeclaration_2_{'static', 'public'}, 'Child', LocalVariableDeclaration_12_set())
+(LocalVariableDeclaration_12_set(), 'Parent', MethodDeclaration_2_{'static', 'public'})
+(LocalVariableDeclaration_12_set(), 'Child', BasicType_13_int)
+(BasicType_13_int, 'Parent', LocalVariableDeclaration_12_set())
+(LocalVariableDeclaration_12_set(), 'Child', VariableDeclarator_14)
+(VariableDeclarator_14, 'Parent', LocalVariableDeclaration_12_set())
+(VariableDeclarator_14, 'Child', MemberReference_15)
+(MemberReference_15, 'Parent', VariableDeclarator_14)
+(VariableDeclarator_7, 'NextUse', MemberReference_15)
+(MemberReference_15, 'Child', ArraySelector_16)
+(ArraySelector_16, 'Parent', MemberReference_15)
+(ArraySelector_16, 'Child', Literal_17_.0)
+(Literal_17_.0, 'Parent', ArraySelector_16)
+(ArraySelector_16, 'Value', Literal_17_.0)
+(MethodDeclaration_2_{'static', 'public'}, 'Child', LocalVariableDeclaration_18_set())
+(LocalVariableDeclaration_18_set(), 'Parent', MethodDeclaration_2_{'static', 'public'})
+(LocalVariableDeclaration_18_set(), 'Child', BasicType_19_int)
+(BasicType_19_int, 'Parent', LocalVariableDeclaration_18_set())
+(LocalVariableDeclaration_18_set(), 'Child', VariableDeclarator_20)
+(VariableDeclarator_20, 'Parent', LocalVariableDeclaration_18_set())
+(VariableDeclarator_20, 'Child', MemberReference_21)
+(MemberReference_21, 'Parent', VariableDeclarator_20)
+(MemberReference_15, 'NextUse', MemberReference_21)
+(MemberReference_21, 'Child', ArraySelector_22)
+(ArraySelector_22, 'Parent', MemberReference_21)
+(ArraySelector_22, 'Child', BinaryOperation_(+)_23)
+(BinaryOperation_(+)_23, 'Parent', ArraySelector_22)
+(BinaryOperation_(+)_23, 'Child', Literal_24_.1)
+(Literal_24_.1, 'Parent', BinaryOperation_(+)_23)
+(BinaryOperation_(+)_23, 'Value', Literal_24_.1)
+(BinaryOperation_(+)_23, 'Child', Literal_25_.1)
+(Literal_25_.1, 'Parent', BinaryOperation_(+)_23)
+(BinaryOperation_(+)_23, 'Value', Literal_25_.1)
+(Literal_24_.1, 'LeftOperand', Literal_25_.1)
+(Literal_25_.1, 'RightOperand', Literal_24_.1)
+(LocalVariableDeclaration_5_set(), 'NextSib', LocalVariableDeclaration_12_set())
+(LocalVariableDeclaration_12_set(), 'NextSib', LocalVariableDeclaration_18_set())
+public class DummyClass {
+public static void copy(FileInputStream source, FileOutputStream target) throws IOException {
+        FileChannel sourceChannel = source.getChannel();
+        FileChannel targetChannel = target.getChannel();
+        sourceChannel.transferTo(0, sourceChannel.size(), targetChannel);
+        sourceChannel.close();
+        targetChannel.close();
+    }
+}
