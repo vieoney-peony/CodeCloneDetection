@@ -296,8 +296,6 @@ class GraphDataset(Dataset):
             values = row['values']
             self.graphs[index], seq_len = self.create_graph(edges, orders, values)
             max_seq_len = max(max_seq_len, seq_len)
-            if seq_len == 1024:
-                break
             print(f"Processing row {i+1}/{len(self.jsonl_dataset)} with seq_len {seq_len}.")
         
         print(f"Max sequence length: {max_seq_len}")
