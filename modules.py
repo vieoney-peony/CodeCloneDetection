@@ -305,6 +305,22 @@ class GCM(nn.Module):
 
         return out
 
+class AttentionFusion(nn.Module):
+    def __init__(self, hidden_dim):
+        super().__init__()
+        self.attention_mlp = nn.Sequential(
+            nn.Linear(hidden_dim, 1),  
+            nn.Softmax(dim=0) 
+        )
+
+    def forward(self, outputs):
+        # Tính điểm cho mỗi đầu ra
+        scores = torch.stack([self.attention_mlp(out).squeeze() for out in outputs]) # (layer, num_node)  
+        weights = scores / scores.sum(dim=0, keepdim=True)  # (layer, num_node)
+        
+        # Weighted sum
+        final_output = sum(w.unsqueeze(1) * out for w, out in zip(weights, outputs)) # (num_node, hidden_dim)
+        return final_output
 
 class GraphCreatorv2(nn.Module):
     def __init__(self, node_dict: dict, edge_dict: dict, embedding_dim=128, tokenizer_path="java_tokenizer.json"):
@@ -351,6 +367,7 @@ class GCMv2(nn.Module):
             ) for _ in range(num_layers)
         ])
 
+        self.layer_fusion = AttentionFusion(hidden_dim)
         self.mlp_gate = nn.Sequential(nn.Linear(hidden_dim,1),nn.Sigmoid())
         self.pool = GlobalAttention(gate_nn=self.mlp_gate) 
         self.cls_head = nn.Linear(hidden_dim*2, 2) 
@@ -388,6 +405,11 @@ class GCMv2(nn.Module):
         edges_index_target = target_batch["node", "edge", "node"].edge_index
         edges_attr_target = target_batch["node", "edge", "node"].edge_attr
         batch_size_target = target_batch["node"].batch
+        
+        layer_outputs = {
+            "source": [],
+            "target": []
+        }
 
         for i in range(self.num_layers):
             x_source = self.gnn_layers[i](
@@ -412,6 +434,12 @@ class GCMv2(nn.Module):
                             "batch": batch_size_target}
             
             x_source, x_target = self.cross_graph_attention(source_output, target_output, self.cross_attns[i])
+            
+            layer_outputs["source"].append(x_source)
+            layer_outputs["target"].append(x_target)
+        
+        x_source = self.layer_fusion(layer_outputs["source"])
+        x_target = self.layer_fusion(layer_outputs["target"])
 
         pooled_source = self.pool(x_source, batch_size_source)
         pooled_target = self.pool(x_target, batch_size_target)
