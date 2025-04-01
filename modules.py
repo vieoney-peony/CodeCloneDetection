@@ -355,7 +355,7 @@ class GCMv2(nn.Module):
         self.num_layers = num_layers
         self.num_heads = num_heads
         self.gnn_layers = nn.ModuleList([
-        GENConv(in_dim if i == 0 else hidden_dim, 
+        GATConv(in_dim if i == 0 else hidden_dim, 
                             hidden_dim, )
             for i in range(num_layers)
         ])
@@ -367,10 +367,10 @@ class GCMv2(nn.Module):
             ) for _ in range(num_layers)
         ])
 
-        self.layer_fusion = AttentionFusion(hidden_dim)
-        self.mlp_gate = nn.Sequential(nn.Linear(hidden_dim,1),nn.Sigmoid())
+        # self.layer_fusion = AttentionFusion(hidden_dim)
+        self.mlp_gate = nn.Sequential(nn.Linear(hidden_dim, 1), nn.Sigmoid())
         self.pool = GlobalAttention(gate_nn=self.mlp_gate) 
-        self.cls_head = nn.Linear(hidden_dim*4, 2) 
+        self.cls_head = nn.Linear(hidden_dim*2, 2) 
     
     def cross_graph_attention(self, source_output, target_output, cross_attn):
         source_x, target_x = source_output['x'], target_output['x']
@@ -408,12 +408,6 @@ class GCMv2(nn.Module):
         edges_attr_target = target_batch["node", "edge", "node"].edge_attr
         batch_target = target_batch["node"].batch
 
-        # Khởi tạo danh sách lưu trữ output của mỗi tầng cho nhánh chung và riêng
-        common_outputs_source = []
-        common_outputs_target = []
-        private_outputs_source = []
-        private_outputs_target = []
-
         for i in range(self.num_layers):
             # 1. Áp dụng GNN layer cho từng đồ thị
             x_source = self.gnn_layers[i](
@@ -438,36 +432,12 @@ class GCMv2(nn.Module):
                             "batch": batch_target}
 
             # 3. Thực hiện cross-graph attention để trích xuất các đặc trưng chung
-            x_source_common, x_target_common = self.cross_graph_attention(source_output, target_output, self.cross_attns[i])
-            
-            # 4. Tách riêng đặc trưng riêng bằng cách lấy phần hiệu chỉnh
-            x_source_private = x_source - x_source_common
-            x_target_private = x_target - x_target_common
+            x_source, x_target = self.cross_graph_attention(source_output, target_output, self.cross_attns[i])
+        
+        x_source = self.pool(x_source, batch_source)  # (batch_size, hidden_dim)
+        x_target = self.pool(x_target, batch_target)  # (batch_size, hidden_dim)
 
-            # 5. Lưu lại kết quả từ tầng hiện tại
-            common_outputs_source.append(x_source_common)
-            common_outputs_target.append(x_target_common)
-            private_outputs_source.append(x_source_private)
-            private_outputs_target.append(x_target_private)
-
-        # 6. Fusion across layers: hợp nhất các đặc trưng từ các tầng (có thể dùng AttentionFusion)
-        fused_common_source = self.layer_fusion(common_outputs_source)
-        fused_common_target = self.layer_fusion(common_outputs_target)
-        fused_private_source = self.layer_fusion(private_outputs_source)
-        fused_private_target = self.layer_fusion(private_outputs_target)
-
-        # 7. Global pooling cho từng nhánh
-        pooled_common_source = self.pool(fused_common_source, batch_source)
-        pooled_common_target = self.pool(fused_common_target, batch_target)
-        pooled_private_source = self.pool(fused_private_source, batch_source)
-        pooled_private_target = self.pool(fused_private_target, batch_target)
-
-        # 8. Fusion: kết hợp các đặc trưng chung và riêng của mỗi đồ thị
-        final_source = torch.cat([pooled_common_source, pooled_private_source], dim=-1)
-        final_target = torch.cat([pooled_common_target, pooled_private_target], dim=-1)
-
-        # 9. Cuối cùng, kết hợp hai đồ thị để đưa vào lớp phân loại
-        combined = torch.cat([final_source, final_target], dim=-1)
+        combined = torch.cat([x_source, x_target], dim=-1)
         out = torch.softmax(self.cls_head(combined), dim=-1)
 
         return out
