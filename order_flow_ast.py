@@ -236,7 +236,7 @@ class JavaASTGraphVisitor:
         current_obj.__class__ = JavaASTLiteralNode
         if qualifier != '':
             qualifier = qualifier + '.'
-        current_obj.value = qualifier + '.' +value
+        current_obj.value = qualifier  + value
         parent_obj = self.parent_stack[-2]
         self.edges.append((parent_obj, "Value", current_obj))
         self.generic_visit(node)
